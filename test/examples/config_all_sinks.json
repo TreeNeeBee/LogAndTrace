@@ -1,0 +1,16 @@
+{
+    "logConfig": {
+        "applicationId": "FULL",
+        "applicationDescription": "Full Sink Test",
+        "contextId": "ALL",
+        "contextDescription": "All Sinks",
+        "logTraceDefaultLogLevel": "Verbose",
+        "logTraceFilePath": "/tmp/lightap_full.log",
+        "logTraceLogMode": ["console", "file", "dlt", "syslog"],
+        "withSessionId": 1,
+        "withTimeStamp": 1,
+        "withEcuId": 1,
+        "logMarker": true,
+        "verboseMode": true
+    }
+}

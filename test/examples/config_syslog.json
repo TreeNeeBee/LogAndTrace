@@ -1,0 +1,16 @@
+{
+    "logConfig": {
+        "applicationId": "SYSL",
+        "applicationDescription": "Syslog Example",
+        "contextId": "SYSC",
+        "contextDescription": "Syslog Context",
+        "logTraceDefaultLogLevel": "Info",
+        "logTraceFilePath": "",
+        "logTraceLogMode": ["syslog", "console"],
+        "withSessionId": 0,
+        "withTimeStamp": 0,
+        "withEcuId": 0,
+        "logMarker": false,
+        "verboseMode": false
+    }
+}

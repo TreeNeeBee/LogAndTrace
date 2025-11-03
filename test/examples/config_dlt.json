@@ -1,0 +1,16 @@
+{
+    "logConfig": {
+        "applicationId": "DLTX",
+        "applicationDescription": "DLT Example",
+        "contextId": "DLTC",
+        "contextDescription": "DLT Context",
+        "logTraceDefaultLogLevel": "Debug",
+        "logTraceFilePath": "/tmp/test.log",
+        "logTraceLogMode": ["dlt", "console"],
+        "withSessionId": 0,
+        "withTimeStamp": 1,
+        "withEcuId": 1,
+        "logMarker": true,
+        "verboseMode": true
+    }
+}

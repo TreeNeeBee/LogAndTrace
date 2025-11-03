@@ -1,0 +1,43 @@
+{
+    "logConfig": {
+        "applicationId" : "@PLACEHOLDER_APP_ID@",
+        "applicationDescription" : "@PLACEHOLDER_APP_DESC@",
+        "contextId" : "@PLACEHOLDER_DEFAULT_CONTEXT_ID@",
+        "contextDescription" : "@PLACEHOLDER_DEFAULT_CONTEXT_DESC@",
+        "logTraceDefaultLogLevel" : "Fatal",
+        "logTraceFilePath" : "@PLACEHOLDER_LOG_FILE_PATH@",
+        "logTraceLogMode": [
+            "console",
+            "file",
+            "syslog",
+            "dlt"
+        ],
+        "withSessionId": 1,
+        "withTimeStamp": 1,
+        "withEcuId": 1,
+        "logMarker": false,
+        "verboseMode": true,
+        "sinks": [
+            {
+                "type": "file",
+                "path": "/var/log/lightap.log",
+                "maxSize": 10485760,
+                "backupCount": 5,
+                "level": "INFO"
+            },
+            {
+                "type": "console",
+                "level": "DEBUG"
+            },
+            {
+                "type": "syslog",
+                "facility": 16,
+                "level": "WARN"
+            },
+            {
+                "type": "dlt",
+                "level": "DEBUG"
+            }
+        ]
+    }
+}

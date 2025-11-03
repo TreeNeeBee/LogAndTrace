@@ -1,0 +1,16 @@
+{
+    "logConfig": {
+        "applicationId": "EXAM",
+        "applicationDescription": "Example Application",
+        "contextId": "MAIN",
+        "contextDescription": "Main Context",
+        "logTraceDefaultLogLevel": "Verbose",
+        "logTraceFilePath": "/tmp/lightap_example.log",
+        "logTraceLogMode": ["console", "file"],
+        "withSessionId": 1,
+        "withTimeStamp": 1,
+        "withEcuId": 1,
+        "logMarker": false,
+        "verboseMode": true
+    }
+}

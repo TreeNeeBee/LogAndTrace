@@ -1,0 +1,448 @@
+# LogAndTrace Module
+
+LightAP 日志模块 - 为 AUTOSAR Adaptive Platform 提供高性能、线程安全的日志系统。
+
+## 特性
+
+### 核心功能
+- ✅ **DLT 兼容日志级别**: 支持 FATAL/ERROR/WARN/INFO/DEBUG/VERBOSE 六个标准级别
+- ✅ **多 Sink 架构**: 同时支持控制台、文件、Syslog 等多种输出目标
+- ✅ **零拷贝优化**: LogEntry 采用单次分配 + 连续内存布局，减少运行时拷贝
+- ✅ **线程安全**: 全局单例 LogManager，所有操作线程安全
+- ✅ **高性能写入**: 同步写入模式，单线程吞吐量 **222K-667K logs/sec**
+- ✅ **低延迟**: P50 延迟 **< 1μs**，P99 延迟 **< 5μs**
+- ✅ **内存安全**: 无内存泄漏，集成 Core Memory 追踪
+
+### Sink 类型
+| Sink | 描述 | 配置参数 |
+|------|------|----------|
+| **FileSink** | 文件日志，支持自动轮转 | 文件路径、最大文件大小、备份数量、日志级别 |
+| **ConsoleSink** | 控制台输出（stdout/stderr） | 日志级别、颜色输出（可选） |
+| **SyslogSink** | 系统 syslog 集成 | syslog facility、日志级别 |
+
+### 性能指标（基于 benchmark 测试）
+
+#### 吞吐量测试
+- 单线程写入：**222,222 - 666,667 logs/sec**
+- 测试消息长度：10 字节
+- 写入方式：同步写入（无异步队列）
+
+#### 延迟测试
+| 指标 | 延迟 |
+|------|------|
+| P50 (中位数) | < 1μs |
+| P90 | < 2μs |
+| P99 | < 5μs |
+| P99.9 | < 10μs |
+
+#### 内存占用
+- LogEntry 固定开销：**64 字节**（头部元数据）
+- 动态内存：消息长度 + contextId 长度
+- 内存池管理：9 个预分配池，总计 **8 KB** 基线内存
+- 10 万条日志测试：**无内存泄漏**
+
+## 快速开始
+
+### 最简用法（使用默认配置）
+
+```cpp
+#include "CLogManager.hpp"
+
+using namespace lap::log;
+
+int main() {
+    // 1. 初始化（使用默认配置）
+    auto& logMgr = LogManager::getInstance();
+    logMgr.initialize();  // 默认只启用 Console sink，日志级别 Info
+    
+    // 2. 获取 Logger 并写日志
+    auto& logger = logMgr.logger();  // 使用默认 logger
+    
+    logger.fatal("This is a fatal error");
+    logger.error("Error message");
+    logger.warn("Warning message");
+    logger.info("Info message");
+    logger.debug("Debug message - won't show with default Info level");
+    
+    return 0;
+}
+```
+
+**默认配置说明**：
+- 输出目标：**仅 Console**（控制台输出）
+- 日志级别：**Info**（显示 Fatal/Error/Warn/Info，不显示 Debug/Verbose）
+- 时间戳：启用
+- 颜色输出：启用（如果终端支持）
+
+### 基本用法
+
+```cpp
+#include "CLogManager.hpp"
+
+using namespace lap::log;
+
+int main() {
+    // 1. 获取 LogManager 实例
+    auto& logMgr = LogManager::getInstance();
+    
+    // 2. 添加 Sink（可选，如果已有配置文件则自动加载）
+    logMgr.addFileSink("/tmp/app.log", 10*1024*1024, 3, LogLevel::kDebug);
+    logMgr.addConsoleSink(LogLevel::kInfo);
+    
+    // 3. 获取 Logger 并写日志
+    auto logger = logMgr.getLogger("APP");
+    
+    logger->fatal("This is a fatal error");
+    logger->error("Error code: {}", 404);
+    logger->warn("Warning: resource low");
+    logger->info("Application started");
+    logger->debug("Debug info: {}", someValue);
+    logger->verbose("Verbose trace data");
+    
+    return 0;
+}
+```
+
+### 配置文件加载
+
+LogManager 支持从 JSON 配置文件加载 Sink 配置：
+
+```cpp
+LogManager::getInstance().loadConfig("log_config.json");
+```
+
+**配置加载优先级**：
+1. 如果调用 `initialize()` 时指定配置文件，使用指定的配置
+2. 否则查找应用目录下的 `config.json`，如果存在则使用
+3. 如果配置文件不存在或解析失败，使用默认配置
+
+**默认配置值**：
+```cpp
+applicationId: "DEFT"
+applicationDescription: "Default App"
+contextId: "DEFT"
+contextDescription: "Default Context"
+logLevel: Warn
+logMode: dlt and Console
+```
+
+配置文件示例（参考 `doc/logConfig_template.json`）：
+
+```json
+{
+  "logConfig": {
+    "applicationId": "@PLACEHOLDER_APP_ID@",
+    "applicationDescription": "@PLACEHOLDER_APP_DESC@",
+    "contextId": "@PLACEHOLDER_DEFAULT_CONTEXT_ID@",
+    "contextDescription": "@PLACEHOLDER_DEFAULT_CONTEXT_DESC@",
+    "logTraceDefaultLogLevel": "Fatal",
+    "logTraceFilePath": "@PLACEHOLDER_LOG_FILE_PATH@",
+    "logTraceLogMode": [
+      "console",
+      "file",
+      "syslog",
+      "network"
+    ],
+    "withSessionId": 1,
+    "withTimeStamp": 1,
+    "withEcuId": 1,
+    "logMarker": false,
+    "verboseMode": true,
+    "sinks": [
+      {
+        "type": "file",
+        "path": "/var/log/lightap.log",
+        "maxSize": 10485760,
+        "backupCount": 5,
+        "level": "INFO"
+      },
+      {
+        "type": "console",
+        "level": "DEBUG"
+      },
+      {
+        "type": "syslog",
+        "facility": 16,
+        "level": "WARN"
+      }
+    ]
+  }
+}
+```
+
+### 配置项说明
+
+**基础配置**：
+- `applicationId`: 应用程序标识符
+- `applicationDescription`: 应用程序描述
+- `contextId`: 默认上下文标识符
+- `contextDescription`: 默认上下文描述
+- `logTraceDefaultLogLevel`: 默认日志级别（Fatal/Error/Warn/Info/Debug/Verbose）
+- `logTraceFilePath`: 日志文件路径
+
+**输出模式**：
+- `logTraceLogMode`: 日志输出模式数组，支持 `console`、`file`、`network`
+
+**格式选项**：
+- `withSessionId`: 是否包含会话 ID（1=启用，0=禁用）
+- `withTimeStamp`: 是否包含时间戳（1=启用，0=禁用）
+- `withEcuId`: 是否包含 ECU ID（1=启用，0=禁用）
+- `logMarker`: 日志标记开关（true/false）
+- `verboseMode`: 详细模式开关（true/false）
+
+**Sinks 配置**：
+- `sinks`: Sink 配置数组，支持多个输出目标
+  - **FileSink**: `type: "file"`, `path`, `maxSize`, `backupCount`, `level`
+  - **ConsoleSink**: `type: "console"`, `level`
+  - **SyslogSink**: `type: "syslog"`, `facility`, `level`
+```
+
+## 架构设计
+
+### 整体架构
+
+```
+┌─────────────┐
+│   Logger    │ (应用层 API)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ LogManager  │ (单例，管理 Logger 和 Sink)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│SinkManager  │ (管理多个 Sink)
+└──────┬──────┘
+       │
+       ├──────┐──────┐
+       ▼      ▼      ▼
+   ┌────┐ ┌────┐ ┌────┐
+   │File│ │Con-│ │Sys-│
+   │Sink│ │sole│ │log │
+   └────┘ └────┘ └────┘
+```
+
+### LogEntry 零拷贝设计
+
+```
+内存布局（单次分配）:
+┌─────────────────────────────────────────┐
+│ LogEntry Header (64 bytes)              │
+├─────────────────────────────────────────┤
+│ contextId (variable length)             │
+├─────────────────────────────────────────┤
+│ message (variable length)               │
+└─────────────────────────────────────────┘
+
+优势：
+- 单次内存分配
+- 无需 std::string 管理
+- Sink 直接访问连续内存
+- 支持 writev 零拷贝写入
+```
+
+### 同步写入模式
+
+当前版本采用**同步写入**模式：
+- Logger::write() → SinkManager::write() → 各 Sink 立即写出
+- 优点：代码简单、稳定性高、调试方便
+- 性能：单线程仍可达 **222K-667K logs/sec**
+
+> 注：异步队列功能已在 Phase 2 中移除（由于稳定性问题），后续版本可能重新引入。
+
+## 构建与测试
+
+### 构建
+
+```bash
+cd LightAP
+mkdir build && cd build
+cmake ..
+make lap_log -j$(nproc)
+```
+
+### 运行单元测试
+
+```bash
+cd build/modules/LogAndTrace
+./log_test
+```
+
+测试覆盖：
+- ✅ 25 个单元测试全部通过
+- ✅ 测试覆盖 LogManager、FileSink、ConsoleSink、SyslogSink
+
+### 运行性能测试
+
+```bash
+cd build/modules/LogAndTrace
+
+# 吞吐量测试
+./benchmark_throughput
+
+# 延迟测试
+./benchmark_latency
+
+# 内存测试
+./benchmark_memory
+```
+
+## API 参考
+
+### Logger 类
+
+```cpp
+class Logger {
+public:
+    void fatal(const String& message);
+    void error(const String& message);
+    void warn(const String& message);
+    void info(const String& message);
+    void debug(const String& message);
+    void verbose(const String& message);
+    
+    void setLevel(LogLevel level);
+    LogLevel getLevel() const;
+};
+```
+
+### LogManager 类
+
+```cpp
+class LogManager {
+public:
+    static LogManager& getInstance();
+    
+    SharedPtr<Logger> getLogger(const String& contextId);
+    
+    void addFileSink(const String& path, Size maxSize, 
+                     UInt32 backupCount, LogLevel level);
+    void addConsoleSink(LogLevel level);
+    void addSyslogSink(LogLevel level, int facility = LOG_USER);
+    
+    void removeSink(const String& name);
+    void removeAllSinks();
+    
+    Bool loadConfig(const String& configFile);
+};
+```
+
+### LogLevel 枚举
+
+```cpp
+enum class LogLevel : UInt8 {
+    kFatal   = DLT_LOG_FATAL,    // 致命错误
+    kError   = DLT_LOG_ERROR,    // 错误
+    kWarn    = DLT_LOG_WARN,     // 警告
+    kInfo    = DLT_LOG_INFO,     // 信息
+    kDebug   = DLT_LOG_DEBUG,    // 调试
+    kVerbose = DLT_LOG_VERBOSE   // 详细
+};
+```
+
+## 依赖
+
+### 必需
+- **Core Module**: 提供 Memory 管理、类型定义、同步原语
+- **C++14** 或更高版本
+- **Boost Property Tree**: 用于 JSON 配置文件解析
+
+### 可选
+- **syslog**: 如果使用 SyslogSink
+
+## 性能优化建议
+
+1. **选择合适的日志级别**
+   - 生产环境建议使用 INFO 或 WARN 级别
+   - DEBUG/VERBOSE 级别会产生大量日志
+
+2. **合理配置文件轮转**
+   - 根据磁盘空间设置 maxSize 和 backupCount
+   - 避免单文件过大导致 I/O 阻塞
+
+3. **批量写入**
+   - 如果有批量日志需求，考虑在应用层缓存后一次性写入
+
+4. **Core Memory 集成**
+   - Sink 对象使用 Core Memory 分配器（IMP_OPERATOR_NEW）
+   - 可通过 Memory::getMemoryStats() 监控内存使用
+
+## 内存分析
+
+使用 benchmark_memory 可以对比系统内存 (/proc) 与 Core Memory 统计：
+
+```bash
+./benchmark_memory
+```
+
+输出示例：
+```
+Baseline memory (proc): 2952 KB
+Baseline memory (core): 8 KB (pools: 9, allocated: 0 KB)
+
+Logs Written    Memory (KB)    Core: X KB (count: Y)
+1000            2952           Core: 0 KB (count: 1)
+10000           2952           Core: 0 KB (count: 1)
+```
+
+**分析**：
+- **Proc**: 进程总内存（包括代码段、栈、标准库等）
+- **Core Memory**: 只统计使用 Core Memory 分配器的对象（Sink、SinkManager）
+- **LogEntry**: 使用 `::operator new`，不经过 Core Memory 追踪
+
+## 故障排查
+
+### 日志未输出
+
+1. 检查日志级别设置
+   ```cpp
+   logger->setLevel(LogLevel::kDebug); // 确保级别足够低
+   ```
+
+2. 检查 Sink 是否添加
+   ```cpp
+   LogManager::getInstance().addConsoleSink(LogLevel::kVerbose);
+   ```
+
+3. 检查文件权限（FileSink）
+   ```bash
+   ls -la /tmp/app.log
+   ```
+
+### 性能问题
+
+1. 使用 benchmark 工具测量基线性能
+2. 检查是否有 I/O 瓶颈（磁盘满、NFS 慢速）
+3. 减少不必要的日志输出
+
+### 内存泄漏
+
+运行 benchmark_memory 检测：
+```bash
+./benchmark_memory
+# 查看 "Total memory delta" 是否接近 0
+```
+
+## 路线图
+
+- [ ] **Phase 3**: 重新引入稳定的异步队列（无锁环形缓冲区）
+- [ ] 支持结构化日志（JSON 格式）
+- [ ] 支持网络 Sink（TCP/UDP）
+- [ ] 支持日志过滤器（基于 context/message 模式匹配）
+- [ ] 集成 DLT daemon 支持
+
+## 许可证
+
+Copyright (c) 2025 ddkv587 (ddkv587@gmail.com)
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+## 联系方式
+
+- 作者: ddkv587
+- 邮箱: ddkv587@gmail.com
+- 项目: LightAP (AUTOSAR Adaptive Platform)
