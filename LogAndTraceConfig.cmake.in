@@ -1,0 +1,26 @@
+# LogAndTraceConfig.cmake.in - CMake配置文件模板
+
+@PACKAGE_INIT@
+
+# 模块信息
+set(LogAndTrace_VERSION @PROJECT_VERSION@)
+set(LogAndTrace_FOUND TRUE)
+
+# 依赖检查
+include(CMakeFindDependencyMacro)
+find_dependency(Core 1.0)
+
+# 导入目标
+include("${CMAKE_CURRENT_LIST_DIR}/LogAndTraceTargets.cmake")
+
+# 设置变量供用户使用
+set(LogAndTrace_LIBRARIES LightAP::lap_log)
+set(LogAndTrace_INCLUDE_DIRS "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+
+# 检查必需的组件
+check_required_components(LogAndTrace)
+
+# 输出找到的信息
+if(NOT LogAndTrace_FIND_QUIETLY)
+    message(STATUS "Found LogAndTrace: ${LogAndTrace_VERSION}")
+endif()

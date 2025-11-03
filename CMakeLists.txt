@@ -122,3 +122,67 @@ if ( ENABLE_MODULE_EXAMPLES )
         DESTINATION bin/examples
     )
 endif ()
+
+# ==============================================================================
+# Installation and Export Configuration
+# ==============================================================================
+
+# Install library with export support
+install(TARGETS ${PLATFORM_SYSTEM_TARGET}_log
+    EXPORT LogAndTraceTargets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include/lap/log
+)
+
+# Install headers
+install(DIRECTORY ${MODULE_SOURCE_CXX_DIR}/inc/
+    DESTINATION include/lap/log
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+)
+
+# Install documentation
+install(FILES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/README.md
+    DESTINATION share/doc/lap-log
+)
+
+# ==============================================================================
+# CMake Package Configuration (支持 find_package)
+# ==============================================================================
+include(CMakePackageConfigHelpers)
+
+# 导出目标
+install(EXPORT LogAndTraceTargets
+    FILE LogAndTraceTargets.cmake
+    NAMESPACE LightAP::
+    DESTINATION lib/cmake/LogAndTrace
+    COMPONENT Development
+)
+
+# 配置包配置文件
+set(CMAKE_INSTALL_INCLUDEDIR "include/lap/log")
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/LogAndTraceConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/LogAndTraceConfig.cmake
+    INSTALL_DESTINATION lib/cmake/LogAndTrace
+    PATH_VARS CMAKE_INSTALL_INCLUDEDIR
+)
+
+# 生成版本文件
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/LogAndTraceConfigVersion.cmake
+    VERSION ${MODULE_VERNO}
+    COMPATIBILITY SameMajorVersion
+)
+
+# 安装配置文件
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/LogAndTraceConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/LogAndTraceConfigVersion.cmake
+    DESTINATION lib/cmake/LogAndTrace
+    COMPONENT Development
+)
+
+message(STATUS "[LogAndTrace] CMake package configuration will be installed to lib/cmake/LogAndTrace")
