@@ -3,6 +3,7 @@
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
 #include "CLogStream.hpp"
+#include <core/CConfig.hpp>
 
 using namespace lap::log;
 using lap::core::InstanceSpecifier;
@@ -10,6 +11,8 @@ using lap::core::InstanceSpecifier;
 class LogFixture : public ::testing::Test {
 protected:
     void SetUp() override {
+        // Initialize ConfigManager before LogManager (uses defaults if no config)
+        lap::core::ConfigManager::getInstance();
         // Initialize with default config if available; else fallback to defaults
         LogManager::getInstance().initialize();
     }

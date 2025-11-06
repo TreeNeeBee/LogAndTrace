@@ -29,6 +29,13 @@ set ( ENABLE_BUILD_SHARED_LIBRARY ON CACHE BOOL "Build log shared library" FORCE
 set ( ENABLE_BUILD_WITH_PLATFORM_PREX ON )
 include ( ../../BuildTemplate/SharedLibrary.cmake.in )
 
+# Ensure the log library exports its symbols for consumers (tests, examples)
+# Override global hidden visibility for this target only
+set_target_properties(${PLATFORM_SYSTEM_TARGET}_log PROPERTIES
+    CXX_VISIBILITY_PRESET default
+    VISIBILITY_INLINES_HIDDEN OFF
+)
+
 # Daemon disabled temporarily - include path issues
 # set ( MODULE_DAEMON_DIR ${MODULE_ROOT_DIR}/test/examples )
 # set ( ENABLE_BUILD_DAEMON ON CACHE BOOL "Build log examples" FORCE )
@@ -83,14 +90,13 @@ if ( ENABLE_MODULE_EXAMPLES )
     set ( EXAMPLES_DIR ${MODULE_TEST_DIR}/examples )
     
     set ( EXAMPLE_SOURCES 
-        ${EXAMPLES_DIR}/example_multi_sink.cpp
-        ${EXAMPLES_DIR}/test_dlt_direct.cpp
-        ${EXAMPLES_DIR}/test_config_loading.cpp
-        ${EXAMPLES_DIR}/test_dlt_long_message.cpp
+        ${EXAMPLES_DIR}/example_basic_usage.cpp
+        ${EXAMPLES_DIR}/example_multi_thread.cpp
+        ${EXAMPLES_DIR}/example_file_rotation.cpp
     )
     
     set ( EXAMPLE_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR} ${LOCAL_LIB_INCLUDE_DIRS} )
-    set ( EXAMPLE_LIB ${PLATFORM_SYSTEM_TARGET}_core ${PLATFORM_SYSTEM_TARGET}_log Threads::Threads dlt Boost::filesystem Boost::regex )
+    set ( EXAMPLE_LIB ${PLATFORM_SYSTEM_TARGET}_core ${PLATFORM_SYSTEM_TARGET}_log Threads::Threads )
     
     include_directories ( ${SDK_INCLUDE_DIR} ${EXAMPLE_INCLUDE_DIRS} ${MODULE_EXTERNAL_INCLUDE_DIR} )
     link_directories ( ${SDK_LIB_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${MODULE_EXTERNAL_LIB_DIR} )
@@ -99,16 +105,7 @@ if ( ENABLE_MODULE_EXAMPLES )
         get_filename_component ( EXAMPLE_NAME ${EXAMPLE_SRC} NAME_WE )
         
         add_executable ( ${EXAMPLE_NAME} ${EXAMPLE_SRC} )
-        
-        if ( ${EXAMPLE_NAME} STREQUAL "example_multi_sink" )
-            target_link_libraries ( ${EXAMPLE_NAME} PRIVATE ${EXAMPLE_LIB} )
-        elseif ( ${EXAMPLE_NAME} STREQUAL "test_dlt_direct" )
-            target_link_libraries ( ${EXAMPLE_NAME} PRIVATE dlt )
-        elseif ( ${EXAMPLE_NAME} STREQUAL "test_config_loading" )
-            target_link_libraries ( ${EXAMPLE_NAME} PRIVATE ${EXAMPLE_LIB} )
-        elseif ( ${EXAMPLE_NAME} STREQUAL "test_dlt_long_message" )
-            target_link_libraries ( ${EXAMPLE_NAME} PRIVATE ${EXAMPLE_LIB} )
-        endif ()
+        target_link_libraries ( ${EXAMPLE_NAME} PRIVATE ${EXAMPLE_LIB} )
         
         message ( STATUS "Added example: ${EXAMPLE_NAME}" )
     endforeach ()

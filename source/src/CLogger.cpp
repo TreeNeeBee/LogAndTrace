@@ -97,5 +97,5 @@ namespace log
     {
         ;
     }
-} // namespace core
+} // namespace log
 } // namespace lap

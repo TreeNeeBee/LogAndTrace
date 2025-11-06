@@ -8,7 +8,8 @@
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
 #include "CFileSink.hpp"
-#include <core/CInstanceSpecifier.hpp>
+#include <core/CPath.hpp>
+#include <core/CConfig.hpp>
 #include <fstream>
 
 using namespace lap::log;
@@ -68,13 +69,11 @@ TEST_F(ZeroCopyTest, MessagePointerMatchesLogStreamBuffer)
     auto testSink = std::make_unique<TestFileSink>("/tmp/zero_copy_test.log");
     TestFileSink* sinkPtr = testSink.get();
     
-    // Initialize log manager with a minimal config
-    auto& logMgr = LogManager::getInstance();
-    
-    // Create config file
-    std::ofstream config("/tmp/zero_copy_config.json");
+    // Initialize ConfigManager first with test config
+    auto appCfg = lap::core::Path::append(lap::core::Path::getApplicationFolder(), "config.json");
+    std::ofstream config(appCfg.data());
     config << R"({
-        "logConfig": {
+        "log": {
             "applicationId": "ZCPY",
             "contextId": "TEST",
             "logTraceDefaultLogLevel": "Info",
@@ -83,9 +82,14 @@ TEST_F(ZeroCopyTest, MessagePointerMatchesLogStreamBuffer)
         }
     })";
     config.close();
-    
-    lap::core::InstanceSpecifier spec("/tmp/zero_copy_config.json");
-    ASSERT_TRUE(logMgr.initialize(spec));
+
+    // Initialize ConfigManager before LogManager
+    auto& cfgMgr = lap::core::ConfigManager::getInstance();
+    cfgMgr.initialize(lap::core::String{appCfg.data()}, false);
+
+    // Initialize log manager - it will read from ConfigManager
+    auto& logMgr = LogManager::getInstance();
+    ASSERT_TRUE(logMgr.initialize());
     
     // Replace the file sink with our test sink
     auto& sinkMgr = logMgr.getSinkManager();
@@ -111,8 +115,8 @@ TEST_F(ZeroCopyTest, MessagePointerMatchesLogStreamBuffer)
     std::string capturedMsg(sinkPtr->getLastMessagePtr(), sinkPtr->getLastMessageSize());
     EXPECT_TRUE(capturedMsg.find("Test message for zero-copy verification") != std::string::npos);
     
-    // Clean up
-    std::remove("/tmp/zero_copy_config.json");
+    // Clean up config.json created in application folder
+    std::remove(appCfg.data());
     
     std::cout << "\n✅ Zero-copy verification:" << std::endl;
     std::cout << "   Message pointer: " << static_cast<const void*>(sinkPtr->getLastMessagePtr()) << std::endl;
@@ -130,15 +134,23 @@ TEST_F(ZeroCopyTest, NoBufferCopyBetweenStreamAndSink)
     TestFileSink* sinkPtr = testSink.get();
     
     auto& logMgr = LogManager::getInstance();
-    
+
     if (!logMgr.isInitialized()) {
-        std::ofstream config("/tmp/zero_copy_config2.json");
-        config << R"({"logConfig": {"applicationId": "ZCPY2", "contextId": "TEST2", 
+        // Initialize ConfigManager with test config
+        auto appCfg = lap::core::Path::append(lap::core::Path::getApplicationFolder(), "config.json");
+        std::ofstream config(appCfg.data());
+        config << R"({"log": {"applicationId": "ZCPY2", "contextId": "TEST2", 
                       "logTraceDefaultLogLevel": "Info", "logTraceFilePath": "/tmp/zero_copy_test2.log",
                       "logTraceLogMode": ["file"]}})";
         config.close();
-        lap::core::InstanceSpecifier spec("/tmp/zero_copy_config2.json");
-        ASSERT_TRUE(logMgr.initialize(spec));
+
+        auto& cfgMgr = lap::core::ConfigManager::getInstance();
+        cfgMgr.initialize(lap::core::String{appCfg.data()}, false);
+        
+        ASSERT_TRUE(logMgr.initialize());
+        
+        // Remove config.json to avoid affecting other tests
+        std::remove(appCfg.data());
     }
     
     auto& sinkMgr = logMgr.getSinkManager();
@@ -164,7 +176,6 @@ TEST_F(ZeroCopyTest, NoBufferCopyBetweenStreamAndSink)
             << "Expected to find: " << msg << " in captured: " << captured;
     }
     
-    std::remove("/tmp/zero_copy_config2.json");
     std::remove("/tmp/zero_copy_test2.log");
     
     std::cout << "\n✅ Multiple messages verified - all passed by reference (zero-copy)" << std::endl;

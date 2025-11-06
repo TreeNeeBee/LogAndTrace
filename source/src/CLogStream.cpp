@@ -1,8 +1,6 @@
 #include <chrono>
 #include <stdarg.h>
 #include <ctime>
-#include <iomanip>
-#include <sstream>
 #include <core/CPath.hpp>
 #include "CLogStream.hpp"
 #include "CLogger.hpp"

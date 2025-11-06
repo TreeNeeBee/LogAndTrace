@@ -1,58 +1,43 @@
-#include <dlt/dlt.h>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
-#include <fstream>
-#include "CPath.hpp"
+#include <syslog.h>
+#include <nlohmann/json.hpp>
+#include <core/CConfig.hpp>
 #include "CLogManager.hpp"
+#include "CConsoleSink.hpp"
+#include "CFileSink.hpp"
+#include "CSyslogSink.hpp"
+#include "CDLTSink.hpp"
 
-#define DEFAULT_CONFIG_FILE     "config.json"
 namespace lap
 {
 namespace log
 {
-    CLogManager::CLogManager() noexcept
+    const char* DEFAULT_LOG_CONFIG = "log";
+
+    LogManager::LogManager() noexcept
     {
         resetLogConfig();
+
+        initialize();
     }
 
-    CLogManager::~CLogManager() noexcept
+    LogManager::~LogManager() noexcept
     {
         if ( m_bInitialized ) {
+            // Save current configuration before uninitialize
+            saveToCoreConfig();
+
             uninitialize();
         }
     }
 
-    core::Bool CLogManager::initialize() noexcept
+    core::Bool LogManager::initialize() noexcept
     {
         // pre init set
         if ( m_bInitialized )   return m_bInitialized;
 
-        INNER_LOG_DEBUG( "CLogManager::initialize...\n" );
-
-        core::StringView strConfigFile = core::Path::append( core::Path::getApplicationFolder(), DEFAULT_CONFIG_FILE );
-
-        std::ifstream ifs( strConfigFile.data() );
-        if ( ifs.good() ) {
-            // try to use default config
-            if ( !parseLogConfig( strConfigFile ) ) {
-                // reset log config if parse failed
-                resetLogConfig();
-            }
-        }
-
-        m_bInitialized = initWithLogConfig();
-
-        return m_bInitialized;
-    }
-
-    core::Bool CLogManager::initialize( const lap::core::InstanceSpecifier &strConfigFile ) noexcept
-    {
-        if ( m_bInitialized )   return m_bInitialized;
-
-        INNER_LOG_DEBUG( "CLogManager::initialize with specified file %s...\n", strConfigFile.ToString().data() );
-
-        // parse from specified config file
-        if ( !parseLogConfig( strConfigFile.ToString() ) ) {
+        // Load logging configuration from Core Config
+        // ConfigManager should already be initialized by the application
+        if ( !loadFromCoreConfig() ) {
             resetLogConfig();
         }
 
@@ -61,25 +46,39 @@ namespace log
         return m_bInitialized;
     }
 
-    void CLogManager::uninitialize() noexcept
+    core::Bool LogManager::initialize( const lap::core::InstanceSpecifier &strConfigFile ) noexcept
+    {
+        if ( m_bInitialized )   return m_bInitialized;
+
+        // For model specifier we rely on Core ConfigManager
+        // ConfigManager should already be initialized by the application
+        (void)strConfigFile; // parameter intentionally unused in Core Config flow
+        
+        if ( !loadFromCoreConfig() ) {
+            resetLogConfig();
+        }
+
+        m_bInitialized = initWithLogConfig();
+
+        return m_bInitialized;
+    }
+
+    void LogManager::uninitialize() noexcept
     {
         if ( !m_bInitialized )  return;
 
-        INNER_LOG_DEBUG( "CLogManager::uninitialize...\n" );
-
-        ::std::lock_guard< ::std::mutex > lock( m_mtxContextMap );
+        std::lock_guard<std::mutex> lock( m_mtxContextMap );
         m_mapLogContext.clear();
 
         // unregister default context
         m_defaultLogCtx.release();
 
-        // unregister app
-        DLT_UNREGISTER_APP();
+        // DLT unregistration is now handled by CDLTSink destructor
 
         m_bInitialized = false;
     }
 
-    Logger& CLogManager::registerLogger( lap::core::StringView ctxID, lap::core::StringView ctxDesc, LogLevel level, TraceStatus status ) noexcept
+    Logger& LogManager::registerLogger( lap::core::StringView ctxID, lap::core::StringView ctxDesc, LogLevel level, TraceStatus status ) noexcept
     {
         // Make sure the initialization function has been called
         assert( m_bInitialized && "Make sure the initialization function has been called!!!"  );
@@ -94,7 +93,7 @@ namespace log
             // already exist
             return *( it->second );
         } else {
-            ::std::lock_guard< ::std::mutex > lock( m_mtxContextMap );
+            std::lock_guard<std::mutex> lock( m_mtxContextMap );
             // create new logger
             auto&& _it = m_mapLogContext.emplace( ctxID, ::std::make_unique< Logger >( ctxID, ctxDesc, level, status ) );
 
@@ -103,7 +102,7 @@ namespace log
         }
     }
 
-    Logger& CLogManager::logger( lap::core::StringView ctxID ) noexcept
+    Logger& LogManager::logger( lap::core::StringView ctxID ) noexcept
     {
         // Make sure the initialization function has been called
         assert( m_bInitialized && "Make sure the initialization function has been called!!!" );
@@ -123,7 +122,7 @@ namespace log
         }
     }
 
-    void CLogManager::resetLogConfig() noexcept
+    void LogManager::resetLogConfig() noexcept
     {
        // set default log config
         m_logConfig.strApplicationId                = "DEFT";
@@ -131,8 +130,8 @@ namespace log
         m_logConfig.strDefaultContextId             = "DEFT";
         m_logConfig.strDefaultContextDescription    = "Default Context";
         m_logConfig.strLogTraceFilePath             = "";
-        m_logConfig.logTraceDefaultLogLevel         = LogLevel::kFatal;
-        m_logConfig.logTraceLogMode                 = LogMode::kRemote;
+        m_logConfig.logTraceDefaultLogLevel         = LogLevel::kWarn;
+        m_logConfig.logTraceLogMode                 = LogMode::kConsole;  // Default to Console only
         m_logConfig.logTraceStatus                  = TraceStatus::kDefault;
 
         m_logConfig.iWithSessionId                  = 1;
@@ -140,124 +139,334 @@ namespace log
         m_logConfig.iWithEcuId                      = 1;
         m_logConfig.isLogMarker                     = false;
         m_logConfig.isVerboseMode                   = true;
+        
+        // FileSink rotation defaults
+        m_logConfig.logFileMaxSize                  = 10 * 1024 * 1024;  // 10MB
+        m_logConfig.logFileMaxBackups               = 5;                 // 5 backup files
     }
 
-    core::Bool CLogManager::parseLogConfig( core::StringView strConfigFile ) noexcept
+    core::Bool LogManager::loadFromCoreConfig() noexcept
     {
-        std::ifstream ifs{ strConfigFile.data() };
-        if ( !ifs.good() ) {
-            INNER_LOG_WARNING( "CLogManager::parseLogConfig cannot open %s\n", strConfigFile.data() );
-            return false;
-        }
-
-        boost::property_tree::ptree root;
         try {
-            ifs.clear();
-            ifs.seekg( 0 );
-            boost::property_tree::read_json( ifs, root );
-        } catch ( const ::std::exception& e ) {
-            INNER_LOG_WARNING( "CLogManager::parseLogConfig %s failed: %s\n", strConfigFile.data(), e.what() );
+            auto& cfgMgr = core::ConfigManager::getInstance();
+            nlohmann::json logObj = cfgMgr.getModuleConfigJson(DEFAULT_LOG_CONFIG);
+            if (!logObj.is_object()) {
+                auto all = nlohmann::json::parse(cfgMgr.toJson(false), nullptr, false);
+                if (all.is_object() && all.contains(DEFAULT_LOG_CONFIG) && all[DEFAULT_LOG_CONFIG].is_object()) {
+                    logObj = all[DEFAULT_LOG_CONFIG];
+                } else {
+                    return true; // keep defaults
+                }
+            }
+
+            auto getStr = [&]( const char* key, ::std::string& out ) {
+                if (logObj.contains(key) && logObj[key].is_string()) { out = logObj[key].get< ::std::string >(); return true; } return false; };
+            auto getInt = [&]( const char* key, ::std::int64_t& out ) {
+                if (logObj.contains(key) && logObj[key].is_number_integer()) { out = logObj[key].get< ::std::int64_t >(); return true; } return false; };
+            auto getUInt = [&]( const char* key, ::std::uint64_t& out ) {
+                if (logObj.contains(key) && logObj[key].is_number_unsigned()) { out = logObj[key].get< ::std::uint64_t >(); return true; } return false; };
+            auto getBool = [&]( const char* key, bool& out ) {
+                if (logObj.contains(key) && logObj[key].is_boolean()) { out = logObj[key].get< bool >(); return true; } return false; };
+
+            ::std::string s;
+            if ( getStr( "applicationId", s ) ) {
+                m_logConfig.strApplicationId = core::String{ formatId( core::StringView{ s.c_str() } ) };
+            }
+            if ( getStr( "applicationDescription", s ) ) {
+                m_logConfig.strApplicationDescription = core::String{ s.c_str() };
+            }
+            if ( getStr( "contextId", s ) ) {
+                m_logConfig.strDefaultContextId = core::String{ formatId( core::StringView{ s.c_str() } ) };
+            }
+            if ( getStr( "contextDescription", s ) ) {
+                m_logConfig.strDefaultContextDescription = core::String{ s.c_str() };
+            }
+            if ( getStr( "logTraceDefaultLogLevel", s ) ) {
+                m_logConfig.logTraceDefaultLogLevel = formatLevel( core::StringView{ s.c_str() } );
+            }
+            if ( getStr( "logTraceFilePath", s ) ) {
+                m_logConfig.strLogTraceFilePath = core::String{ s.c_str() };
+            }
+
+            if (logObj.contains("logTraceLogMode") && logObj["logTraceLogMode"].is_array()) {
+                m_logConfig.logTraceLogMode = LogMode::kOff;
+                for (const auto& vj : logObj["logTraceLogMode"]) {
+                    if (!vj.is_string()) continue;
+                    auto v = vj.get< ::std::string >();
+                    if ( v == "console" ) m_logConfig.logTraceLogMode |= LogMode::kConsole;
+                    else if ( v == "file" ) m_logConfig.logTraceLogMode |= LogMode::kFile;
+                    else if ( v == "dlt" ) m_logConfig.logTraceLogMode |= LogMode::kDlt;
+                    else if ( v == "syslog" ) m_logConfig.logTraceLogMode |= LogMode::kSyslog;
+                    else {
+                        fprintf( stderr, "[LightAP] LogManager: Unknown log mode '%s' in config, ignored.\n", v.c_str() );
+                    }
+                }
+            }
+
+            ::std::int64_t iv = 0;
+            ::std::uint64_t uv = 0;
+            if ( getInt( "withSessionId", iv ) ) m_logConfig.iWithSessionId = static_cast<core::Int8>( iv );
+            if ( getInt( "withTimeStamp", iv ) ) m_logConfig.iWithTimeStamp = static_cast<core::Int8>( iv );
+            if ( getInt( "withEcuId", iv ) ) m_logConfig.iWithEcuId = static_cast<core::Int8>( iv );
+
+            bool bv = false;
+            if ( getBool( "logMarker", bv ) ) m_logConfig.isLogMarker = bv;
+            if ( getBool( "verboseMode", bv ) ) m_logConfig.isVerboseMode = bv;
+
+            if ( getUInt( "logFileMaxSize", uv ) && uv > 0 ) {
+                m_logConfig.logFileMaxSize = static_cast<core::Size>( uv );
+            }
+            if ( getUInt( "logFileMaxBackups", uv ) && uv > 0 ) {
+                m_logConfig.logFileMaxBackups = static_cast<core::UInt32>( uv );
+            }
+
+            if (logObj.contains("sinks") && logObj["sinks"].is_array()) {
+                m_sinkConfigs.clear();
+                for (const auto& sj : logObj["sinks"]) {
+                    if (sj.is_object()) m_sinkConfigs.push_back(sj);
+                }
+            }
+
+            return true;
+        } catch (const ::std::exception& e) {
+            fprintf(stderr, "[LightAP] LogManager: loadFromCoreConfig failed: %s\n", e.what());
             return false;
         }
+    }
 
-        auto logOpt = root.get_child_optional( "logConfig" );
-        if ( !logOpt ) {
-            return true; // keep defaults
-        }
-        const auto& logObj = *logOpt;
-
-        auto getStr = [&]( const char* key, ::std::string& out ) {
-            auto opt = logObj.get_optional< ::std::string >( key );
-            if ( opt ) { out = *opt; return true; } return false; };
-        auto getInt = [&]( const char* key, ::std::int64_t& out ) {
-            auto opt = logObj.get_optional< ::std::int64_t >( key );
-            if ( opt ) { out = *opt; return true; } return false; };
-        auto getBool = [&]( const char* key, bool& out ) {
-            auto opt = logObj.get_optional< bool >( key );
-            if ( opt ) { out = *opt; return true; } return false; };
-
-        ::std::string s;
-        if ( getStr( "applicationId", s ) ) {
-            m_logConfig.strApplicationId = core::String{ formatId( core::StringView{ s.c_str() } ) };
-        }
-        if ( getStr( "applicationDescription", s ) ) {
-            m_logConfig.strApplicationDescription = core::String{ s.c_str() };
-        }
-        if ( getStr( "contextId", s ) ) {
-            m_logConfig.strDefaultContextId = core::String{ formatId( core::StringView{ s.c_str() } ) };
-        }
-        if ( getStr( "contextDescription", s ) ) {
-            m_logConfig.strDefaultContextDescription = core::String{ s.c_str() };
-        }
-        if ( getStr( "logTraceDefaultLogLevel", s ) ) {
-            m_logConfig.logTraceDefaultLogLevel = formatLevel( core::StringView{ s.c_str() } );
-        }
-        if ( getStr( "logTraceFilePath", s ) ) {
-            m_logConfig.strLogTraceFilePath = core::String{ s.c_str() };
-        }
-
-        auto modesOpt = logObj.get_child_optional( "logTraceLogMode" );
-        if ( modesOpt ) {
-            m_logConfig.logTraceLogMode = LogMode::kOff;
-            for ( const auto& child : *modesOpt ) {
-                const auto& v = child.second.get_value< ::std::string >();
-                if ( v == "console" ) m_logConfig.logTraceLogMode |= LogMode::kConsole;
-                else if ( v == "file" ) m_logConfig.logTraceLogMode |= LogMode::kFile;
-                else if ( v == "network" ) m_logConfig.logTraceLogMode |= LogMode::kRemote;
+    void LogManager::saveToCoreConfig() noexcept
+    {
+        try {
+            auto& cfgMgr = core::ConfigManager::getInstance();
+            
+            // Build JSON configuration object
+            nlohmann::json logObj;
+            
+            // Save basic log config
+            logObj["applicationId"] = std::string(m_logConfig.strApplicationId);
+            logObj["applicationDescription"] = std::string(m_logConfig.strApplicationDescription);
+            logObj["contextId"] = std::string(m_logConfig.strDefaultContextId);
+            logObj["contextDescription"] = std::string(m_logConfig.strDefaultContextDescription);
+            logObj["logTraceFilePath"] = std::string(m_logConfig.strLogTraceFilePath);
+            
+            // Save log level
+            const char* levelStr = "WARN";
+            switch (m_logConfig.logTraceDefaultLogLevel) {
+                case LogLevel::kOff:     levelStr = "OFF"; break;
+                case LogLevel::kFatal:   levelStr = "FATAL"; break;
+                case LogLevel::kError:   levelStr = "ERROR"; break;
+                case LogLevel::kWarn:    levelStr = "WARN"; break;
+                case LogLevel::kInfo:    levelStr = "INFO"; break;
+                case LogLevel::kDebug:   levelStr = "DEBUG"; break;
+                case LogLevel::kVerbose: levelStr = "VERBOSE"; break;
+                case LogLevel::kLogLevelMax: levelStr = "WARN"; break;  // Default fallback
             }
+            logObj["logTraceDefaultLogLevel"] = levelStr;
+            
+            // Save log modes
+            nlohmann::json modesArray = nlohmann::json::array();
+            auto logMode = m_logConfig.logTraceLogMode;
+            if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kConsole))) {
+                modesArray.push_back("console");
+            }
+            if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kFile))) {
+                modesArray.push_back("file");
+            }
+            if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kDlt))) {
+                modesArray.push_back("dlt");
+            }
+            if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kSyslog))) {
+                modesArray.push_back("syslog");
+            }
+            logObj["logTraceLogMode"] = modesArray;
+            
+            // Save DLT-related options
+            logObj["withSessionId"] = static_cast<int>(m_logConfig.iWithSessionId);
+            logObj["withTimeStamp"] = static_cast<int>(m_logConfig.iWithTimeStamp);
+            logObj["withEcuId"] = static_cast<int>(m_logConfig.iWithEcuId);
+            logObj["logMarker"] = m_logConfig.isLogMarker;
+            logObj["verboseMode"] = m_logConfig.isVerboseMode;
+            
+            // Save file rotation config
+            logObj["logFileMaxSize"] = m_logConfig.logFileMaxSize;
+            logObj["logFileMaxBackups"] = m_logConfig.logFileMaxBackups;
+            
+            // Save sink configurations if any
+            if (!m_sinkConfigs.empty()) {
+                logObj["sinks"] = m_sinkConfigs;
+            }
+            
+            // Write to ConfigManager
+            cfgMgr.setModuleConfigJson(DEFAULT_LOG_CONFIG, logObj);
+            
+        } catch (const ::std::exception& e) {
+            fprintf(stderr, "[LightAP] LogManager: saveToCoreConfig failed: %s\n", e.what());
         }
+    }
 
-        ::std::int64_t iv = 0;
-        if ( getInt( "withSessionId", iv ) ) m_logConfig.iWithSessionId = static_cast<core::Int8>( iv );
-        if ( getInt( "withTimeStamp", iv ) ) m_logConfig.iWithTimeStamp = static_cast<core::Int8>( iv );
-        if ( getInt( "withEcuId", iv ) ) m_logConfig.iWithEcuId = static_cast<core::Int8>( iv );
+    core::Bool LogManager::initWithLogConfig() noexcept
+    {
+        // DLT initialization is now handled by CDLTSink
+        
+        // register default logger
+        m_defaultLogCtx = ::std::make_unique< Logger >( 
+            core::StringView( m_logConfig.strDefaultContextId ), 
+            core::StringView( m_logConfig.strDefaultContextDescription ), 
+            m_logConfig.logTraceDefaultLogLevel 
+        );
 
-        bool bv = false;
-        if ( getBool( "logMarker", bv ) ) m_logConfig.isLogMarker = bv;
-        if ( getBool( "verboseMode", bv ) ) m_logConfig.isVerboseMode = bv;
+        assert( m_defaultLogCtx != nullptr && "The default log context creation failed!!!" );
+
+        // Initialize SinkManager based on log mode configuration
+        initializeSinks();
 
         return true;
     }
 
-    core::Bool CLogManager::initWithLogConfig() noexcept
+    void LogManager::initializeSinks() noexcept
     {
-        INNER_LOG_DEBUG( "apid: %s, ctid: %s, level: %d\n", \
-                            m_logConfig.strApplicationId.c_str(), \
-                            m_logConfig.strDefaultContextId.c_str(), \
-                            static_cast< core::UInt8 >( m_logConfig.logTraceDefaultLogLevel ) );
-
-        dlt_with_session_id( m_logConfig.iWithSessionId );
-        dlt_with_timestamp( m_logConfig.iWithTimeStamp );
-        dlt_with_ecu_id( m_logConfig.iWithEcuId );
-        if ( m_logConfig.isLogMarker )      DLT_LOG_MARKER();
-        if ( m_logConfig.isVerboseMode )    DLT_VERBOSE_MODE();
-
-        // register app
-        auto ret = dlt_check_library_version(_DLT_PACKAGE_MAJOR_VERSION, _DLT_PACKAGE_MINOR_VERSION);
-        if ( DLT_RETURN_OK != ret ) {
-            INNER_LOG_WARNING( "CLogManager::initWithLogConfig dlt_check_library_version error %d\n", static_cast< core::Int32 >( ret ) );
-            // continue without hard failing; DLT operations may be no-ops
+        // Get default log level as fallback
+        auto defaultMinLevel = m_logConfig.logTraceDefaultLogLevel;
+        
+        // Set global minimum level for SinkManager
+        m_sinkManager.setGlobalMinLevel(defaultMinLevel);
+        
+        // Check if we have sink configurations from JSON
+        if (!m_sinkConfigs.empty()) {
+            // Use sink configurations from JSON "sinks" array
+            for (const auto& sinkConfig : m_sinkConfigs) {
+                createSinkFromConfig(sinkConfig);
+            }
+        } else {
+            // Fallback to legacy logTraceLogMode configuration
+            auto logMode = m_logConfig.logTraceLogMode;
+            
+            // Add Console sink if enabled
+            if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kConsole))) {
+                auto consoleSink = ::std::make_unique<ConsoleSink>(true, defaultMinLevel);
+                m_sinkManager.addSink(std::move(consoleSink));
+            }
+            
+            // Add File sink if enabled
+            if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kFile))) {
+                if (!m_logConfig.strLogTraceFilePath.empty()) {
+                    auto fileSink = ::std::make_unique<FileSink>(
+                        core::StringView(m_logConfig.strLogTraceFilePath),
+                        m_logConfig.logFileMaxSize,
+                        m_logConfig.logFileMaxBackups,
+                        defaultMinLevel,
+                        core::StringView(m_logConfig.strApplicationId)
+                    );
+                    m_sinkManager.addSink(std::move(fileSink));
+                }
+            }
+            
+            // Add Syslog sink if enabled
+            if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kSyslog))) {
+                auto syslogSink = ::std::make_unique<SyslogSink>("LightAP", LOG_USER, defaultMinLevel);
+                m_sinkManager.addSink(std::move(syslogSink));
+            }
+            
+            // Add DLT sink if enabled
+            if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kDlt))) {
+                DLTSink::DLTConfig dltConfig;
+                dltConfig.appId = m_logConfig.strApplicationId;
+                dltConfig.appDesc = m_logConfig.strApplicationDescription;
+                dltConfig.contextId = m_logConfig.strDefaultContextId;
+                dltConfig.contextDesc = m_logConfig.strDefaultContextDescription;
+                dltConfig.defaultLogLevel = m_logConfig.logTraceDefaultLogLevel;
+                dltConfig.traceStatus = m_logConfig.logTraceStatus;
+                dltConfig.withSessionId = m_logConfig.iWithSessionId;
+                dltConfig.withTimestamp = m_logConfig.iWithTimeStamp;
+                dltConfig.withEcuId = m_logConfig.iWithEcuId;
+                dltConfig.logMarker = m_logConfig.isLogMarker;
+                dltConfig.verboseMode = m_logConfig.isVerboseMode;
+                
+                auto dltSink = ::std::make_unique<DLTSink>(dltConfig, defaultMinLevel);
+                m_sinkManager.addSink(std::move(dltSink));
+            }
         }
-
-        ret = dlt_register_app( m_logConfig.strApplicationId.c_str(), m_logConfig.strApplicationDescription.c_str() );
-        if ( DLT_RETURN_OK != ret ) {
-            INNER_LOG_WARNING( "CLogManager::initWithLogConfig dlt_register_app error %d\n", static_cast< core::Int32 >( ret ) );
-            // continue; subsequent context registration may fail gracefully
-        }
-
-        // set app limit
-        DLT_SET_APPLICATION_LL_TS_LIMIT( convert( m_logConfig.logTraceDefaultLogLevel ),
-                                            convert( m_logConfig.logTraceStatus ) );
-
-        // register default logger
-        m_defaultLogCtx = ::std::make_unique< Logger >( core::StringView( m_logConfig.strDefaultContextId ), core::StringView( m_logConfig.strDefaultContextDescription ), m_logConfig.logTraceDefaultLogLevel );
-
-        assert( m_defaultLogCtx != nullptr && "The default log context creation failed!!!" );
-
-    return true;
     }
 
-    core::StringView CLogManager::formatId( core::StringView strId ) const noexcept
+    void LogManager::createSinkFromConfig(const nlohmann::json& sinkConfig) noexcept
+    {
+        try {
+            if (!sinkConfig.contains("type") || !sinkConfig["type"].is_string()) {
+                fprintf(stderr, "[LightAP] LogManager: Sink missing 'type' field, skipped\n");
+                return;
+            }
+            std::string type = sinkConfig["type"].get<std::string>();
+
+            // Parse level (optional, use default if not specified)
+            LogLevel sinkLevel = m_logConfig.logTraceDefaultLogLevel;
+            if (sinkConfig.contains("level") && sinkConfig["level"].is_string()) {
+                auto lv = sinkConfig["level"].get<std::string>();
+                sinkLevel = formatLevel(core::StringView(lv.c_str()));
+            }
+            
+            if (type == "file") {
+                // File sink configuration
+                if (!sinkConfig.contains("path") || !sinkConfig["path"].is_string() || sinkConfig["path"].get<std::string>().empty()) {
+                    fprintf(stderr, "[LightAP] LogManager: File sink missing 'path', skipped\n");
+                    return;
+                }
+                auto pathStr = sinkConfig["path"].get<std::string>();
+                size_t maxSize = sinkConfig.contains("maxSize") && sinkConfig["maxSize"].is_number_unsigned() ? sinkConfig["maxSize"].get<size_t>() : m_logConfig.logFileMaxSize;
+                core::UInt32 backupCount = sinkConfig.contains("backupCount") && sinkConfig["backupCount"].is_number_unsigned() ? sinkConfig["backupCount"].get<core::UInt32>() : m_logConfig.logFileMaxBackups;
+                
+                auto fileSink = ::std::make_unique<FileSink>(
+                    core::StringView(pathStr.c_str()),
+                    maxSize,
+                    backupCount,
+                    sinkLevel,
+                    core::StringView(m_logConfig.strApplicationId)
+                );
+                m_sinkManager.addSink(std::move(fileSink));
+                
+            } else if (type == "console") {
+                // Console sink configuration
+                bool colorized = sinkConfig.contains("colorized") && sinkConfig["colorized"].is_boolean() ? sinkConfig["colorized"].get<bool>() : true;
+                auto consoleSink = ::std::make_unique<ConsoleSink>(colorized, sinkLevel);
+                m_sinkManager.addSink(std::move(consoleSink));
+                
+            } else if (type == "syslog") {
+                // Syslog sink configuration
+                // Use applicationId from logConfig as ident
+                std::string ident = m_logConfig.strApplicationId;
+                int facility = sinkConfig.contains("facility") && sinkConfig["facility"].is_number_integer() ? sinkConfig["facility"].get<int>() : LOG_USER;
+                auto syslogSink = ::std::make_unique<SyslogSink>(ident, facility, sinkLevel);
+                m_sinkManager.addSink(std::move(syslogSink));
+                
+            } else if (type == "dlt") {
+                // DLT sink configuration - inherit from logConfig
+                DLTSink::DLTConfig dltConfig;
+                
+                // Use logConfig values (no override from sink config)
+                dltConfig.appId = m_logConfig.strApplicationId;
+                dltConfig.appDesc = m_logConfig.strApplicationDescription;
+                dltConfig.contextId = m_logConfig.strDefaultContextId;
+                dltConfig.contextDesc = m_logConfig.strDefaultContextDescription;
+                dltConfig.defaultLogLevel = sinkLevel;
+                dltConfig.traceStatus = m_logConfig.logTraceStatus;
+                dltConfig.withSessionId = m_logConfig.iWithSessionId;
+                dltConfig.withTimestamp = m_logConfig.iWithTimeStamp;
+                dltConfig.withEcuId = m_logConfig.iWithEcuId;
+                dltConfig.logMarker = m_logConfig.isLogMarker;
+                dltConfig.verboseMode = m_logConfig.isVerboseMode;
+                
+                auto dltSink = ::std::make_unique<DLTSink>(dltConfig, sinkLevel);
+                m_sinkManager.addSink(std::move(dltSink));
+                
+            } else {
+                fprintf(stderr, "[LightAP] LogManager: Unknown sink type '%s', skipped\n", type.c_str());
+            }
+            
+        } catch (const std::exception& e) {
+            fprintf(stderr, "[LightAP] LogManager: Error creating sink: %s\n", e.what());
+        }
+    }
+
+    core::StringView LogManager::formatId( core::StringView strId ) const noexcept
     {
         if ( strId.empty() )        return "XXXX";
 
@@ -266,23 +475,25 @@ namespace log
         return core::StringView{ strId.data(), 4 };
     }
 
-    LogLevel CLogManager::formatLevel( core::StringView strLevel ) const noexcept
+    LogLevel LogManager::formatLevel( core::StringView strLevel ) const noexcept
     {
-        if ( strLevel == "Off" ) { 
+        if ( strLevel == "Off" || strLevel == "OFF" ) { 
             return LogLevel::kOff;
-        } else if ( strLevel == "Fatal" ) { 
+        } else if ( strLevel == "Fatal" || strLevel == "FATAL" ) { 
             return LogLevel::kFatal;
-        } else if ( strLevel == "Warn" ) { 
+        } else if ( strLevel == "Error" || strLevel == "ERROR" ) { 
+            return LogLevel::kError;
+        } else if ( strLevel == "Warn" || strLevel == "WARN" ) { 
             return LogLevel::kWarn;
-        } else if ( strLevel == "Info" ) { 
+        } else if ( strLevel == "Info" || strLevel == "INFO" ) { 
             return LogLevel::kInfo;
-        } else if ( strLevel == "Debug" ) { 
+        } else if ( strLevel == "Debug" || strLevel == "DEBUG" ) { 
             return LogLevel::kDebug;
-        } else if ( strLevel == "Verbose" ) { 
+        } else if ( strLevel == "Verbose" || strLevel == "VERBOSE" ) { 
             return LogLevel::kVerbose;
         } else { 
             return LogLevel::kFatal;
         }
     }
-} // namespace core
+} // namespace log
 } // namespace lap

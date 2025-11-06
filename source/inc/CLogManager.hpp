@@ -21,14 +21,13 @@
 #define LAP_LOG_LOGMANAGER_HPP
 
 #include <core/CSync.hpp>
+#include <core/CConfig.hpp>
 #include "CCommon.hpp"
 #include "CLogger.hpp"
 #include "CSinkManager.hpp"
 #include <core/CInstanceSpecifier.hpp>
 #include <vector>
-
-// Forward declaration for boost::property_tree
-namespace boost { namespace property_tree { template<typename K, typename D, typename C> class basic_ptree; typedef basic_ptree<std::string, std::string, std::less<std::string>> ptree; } }
+#include <nlohmann/json.hpp>
 
 namespace lap
 {
@@ -119,8 +118,11 @@ namespace log
         void                                resetLogConfig() noexcept;
         core::Bool                          initWithLogConfig() noexcept;
         void                                initializeSinks() noexcept;
-        core::Bool                          parseLogConfig( core::StringView strConfigFile ) noexcept;
-        void                                createSinkFromConfig(const boost::property_tree::ptree& sinkConfig) noexcept;
+        // Load and parse logging config from Core::ConfigManager (module: "logConfig")
+        core::Bool                          loadFromCoreConfig() noexcept;
+        // Save current log config to Core::ConfigManager
+        void                                saveToCoreConfig() noexcept;
+        void                                createSinkFromConfig(const nlohmann::json& sinkConfig) noexcept;
 
         core::StringView                    formatId( core::StringView strId ) const noexcept;
         LogLevel                            formatLevel( core::StringView strLevel ) const noexcept;
@@ -132,7 +134,7 @@ namespace log
         tagLogConfig                        m_logConfig;
         
         // Store sink configurations from JSON for later initialization
-        std::vector<boost::property_tree::ptree> m_sinkConfigs;
+        std::vector<nlohmann::json>        m_sinkConfigs;
 
         std::mutex                          m_mtxContextMap;  // TEMP: reverted to std::mutex for debugging
         _LogContextMap                      m_mapLogContext;

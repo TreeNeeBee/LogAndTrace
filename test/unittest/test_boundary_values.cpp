@@ -11,6 +11,7 @@
 #include "CLogger.hpp"
 #include "CLogStream.hpp"
 #include "CFileSink.hpp"
+#include <core/CConfig.hpp>
 
 using namespace lap::log;
 using namespace lap::core;
@@ -18,6 +19,8 @@ using namespace lap::core;
 class BoundaryValueTest : public ::testing::Test {
 protected:
     void SetUp() override {
+        // Initialize ConfigManager before LogManager (uses defaults if no config)
+        lap::core::ConfigManager::getInstance();
         LogManager::getInstance().initialize();
     }
     
