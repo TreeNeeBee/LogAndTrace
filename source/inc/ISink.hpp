@@ -19,9 +19,9 @@
 #ifndef LAP_LOG_ISINK_HPP
 #define LAP_LOG_ISINK_HPP
 
-#include <core/CTypedef.hpp>
-#include <core/CMemory.hpp>
-#include <core/CString.hpp>
+#include <lap/core/CTypedef.hpp>
+#include <lap/core/CMemory.hpp>
+#include <lap/core/CString.hpp>
 #include "CCommon.hpp"
 
 namespace lap

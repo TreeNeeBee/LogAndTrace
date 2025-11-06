@@ -11,7 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <CLog.hpp>
-#include <core/CMemory.hpp>
+#include <lap/core/CMemory.hpp>
 
 using namespace lap::log;
 using namespace lap::core;

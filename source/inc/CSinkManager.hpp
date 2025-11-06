@@ -11,11 +11,10 @@
 #define LAP_LOG_SINKMANAGER_HPP
 
 #include "ISink.hpp"
-#include <core/CTypedef.hpp>
-#include <core/CMemory.hpp>
-#include <core/CString.hpp>
-#include <memory>
-#include <mutex>
+#include <lap/core/CTypedef.hpp>
+#include <lap/core/CMemory.hpp>
+#include <lap/core/CString.hpp>
+#include <lap/core/CSync.hpp>
 
 namespace lap
 {
@@ -51,7 +50,7 @@ namespace log
          */
         void setGlobalMinLevel(LogLevel level) noexcept
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
+            core::LockGuard lock(m_mutex);
             m_globalMinLevel = level;
         }
         
@@ -61,7 +60,7 @@ namespace log
          */
         LogLevel getGlobalMinLevel() const noexcept
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
+            core::LockGuard lock(m_mutex);
             return m_globalMinLevel;
         }
         
@@ -102,7 +101,7 @@ namespace log
          */
         core::Size getSinkCount() const noexcept
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
+            core::LockGuard lock(m_mutex);
             return m_sinks.size();
         }
         
@@ -120,7 +119,7 @@ namespace log
         core::Bool shouldLog(LogLevel level) const noexcept;
         
     private:
-        mutable std::mutex                      m_mutex;            ///< Mutex for thread safety
+        mutable core::Mutex                     m_mutex;            ///< Mutex for thread safety
         core::Vector<core::UniqueHandle<ISink>> m_sinks;            ///< Registered sinks
         LogLevel                                m_globalMinLevel;   ///< Global minimum log level
     };

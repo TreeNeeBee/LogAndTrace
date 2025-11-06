@@ -20,8 +20,8 @@
 #ifndef LAP_LOG_COMMON_HPP
 #define LAP_LOG_COMMON_HPP
 
-#include <core/CTypedef.hpp>
-#include <core/CString.hpp>
+#include <lap/core/CTypedef.hpp>
+#include <lap/core/CString.hpp>
 
 namespace lap
 {

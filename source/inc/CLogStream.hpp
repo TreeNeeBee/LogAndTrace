@@ -20,10 +20,10 @@
 #ifndef LAP_LOG_LOGSTREAM_HPP
 #define LAP_LOG_LOGSTREAM_HPP
 
-#include <core/CErrorCode.hpp>
-#include <core/CInstanceSpecifier.hpp>
-#include <core/CMemory.hpp>
-#include <core/CSpan.hpp>
+#include <lap/core/CErrorCode.hpp>
+#include <lap/core/CInstanceSpecifier.hpp>
+#include <lap/core/CMemory.hpp>
+#include <lap/core/CSpan.hpp>
 
 #include "CCommon.hpp"
 

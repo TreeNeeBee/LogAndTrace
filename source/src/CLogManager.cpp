@@ -1,6 +1,6 @@
 #include <syslog.h>
 #include <nlohmann/json.hpp>
-#include <core/CConfig.hpp>
+#include <lap/core/CConfig.hpp>
 #include "CLogManager.hpp"
 #include "CConsoleSink.hpp"
 #include "CFileSink.hpp"
@@ -67,7 +67,7 @@ namespace log
     {
         if ( !m_bInitialized )  return;
 
-        std::lock_guard<std::mutex> lock( m_mtxContextMap );
+        core::LockGuard lock( m_mtxContextMap );
         m_mapLogContext.clear();
 
         // unregister default context
@@ -93,9 +93,9 @@ namespace log
             // already exist
             return *( it->second );
         } else {
-            std::lock_guard<std::mutex> lock( m_mtxContextMap );
+            core::LockGuard lock( m_mtxContextMap );
             // create new logger
-            auto&& _it = m_mapLogContext.emplace( ctxID, ::std::make_unique< Logger >( ctxID, ctxDesc, level, status ) );
+            auto&& _it = m_mapLogContext.emplace( ctxID, core::MakeUnique< Logger >( ctxID, ctxDesc, level, status ) );
 
             // return default logger
             return *( _it.first->second );
@@ -309,7 +309,7 @@ namespace log
         // DLT initialization is now handled by CDLTSink
         
         // register default logger
-        m_defaultLogCtx = ::std::make_unique< Logger >( 
+        m_defaultLogCtx = core::MakeUnique< Logger >( 
             core::StringView( m_logConfig.strDefaultContextId ), 
             core::StringView( m_logConfig.strDefaultContextDescription ), 
             m_logConfig.logTraceDefaultLogLevel 
@@ -343,28 +343,28 @@ namespace log
             
             // Add Console sink if enabled
             if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kConsole))) {
-                auto consoleSink = ::std::make_unique<ConsoleSink>(true, defaultMinLevel);
-                m_sinkManager.addSink(std::move(consoleSink));
+                auto consoleSink = core::MakeUnique<ConsoleSink>(true, defaultMinLevel);
+                m_sinkManager.addSink(core::Move(consoleSink));
             }
             
             // Add File sink if enabled
             if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kFile))) {
                 if (!m_logConfig.strLogTraceFilePath.empty()) {
-                    auto fileSink = ::std::make_unique<FileSink>(
+                    auto fileSink = core::MakeUnique<FileSink>(
                         core::StringView(m_logConfig.strLogTraceFilePath),
                         m_logConfig.logFileMaxSize,
                         m_logConfig.logFileMaxBackups,
                         defaultMinLevel,
                         core::StringView(m_logConfig.strApplicationId)
                     );
-                    m_sinkManager.addSink(std::move(fileSink));
+                    m_sinkManager.addSink(core::Move(fileSink));
                 }
             }
             
             // Add Syslog sink if enabled
             if (static_cast<bool>(static_cast<core::UInt8>(logMode) & static_cast<core::UInt8>(LogMode::kSyslog))) {
-                auto syslogSink = ::std::make_unique<SyslogSink>("LightAP", LOG_USER, defaultMinLevel);
-                m_sinkManager.addSink(std::move(syslogSink));
+                auto syslogSink = core::MakeUnique<SyslogSink>("LightAP", LOG_USER, defaultMinLevel);
+                m_sinkManager.addSink(core::Move(syslogSink));
             }
             
             // Add DLT sink if enabled
@@ -382,8 +382,8 @@ namespace log
                 dltConfig.logMarker = m_logConfig.isLogMarker;
                 dltConfig.verboseMode = m_logConfig.isVerboseMode;
                 
-                auto dltSink = ::std::make_unique<DLTSink>(dltConfig, defaultMinLevel);
-                m_sinkManager.addSink(std::move(dltSink));
+                auto dltSink = core::MakeUnique<DLTSink>(dltConfig, defaultMinLevel);
+                m_sinkManager.addSink(core::Move(dltSink));
             }
         }
     }
@@ -414,28 +414,28 @@ namespace log
                 size_t maxSize = sinkConfig.contains("maxSize") && sinkConfig["maxSize"].is_number_unsigned() ? sinkConfig["maxSize"].get<size_t>() : m_logConfig.logFileMaxSize;
                 core::UInt32 backupCount = sinkConfig.contains("backupCount") && sinkConfig["backupCount"].is_number_unsigned() ? sinkConfig["backupCount"].get<core::UInt32>() : m_logConfig.logFileMaxBackups;
                 
-                auto fileSink = ::std::make_unique<FileSink>(
+                auto fileSink = core::MakeUnique<FileSink>(
                     core::StringView(pathStr.c_str()),
                     maxSize,
                     backupCount,
                     sinkLevel,
                     core::StringView(m_logConfig.strApplicationId)
                 );
-                m_sinkManager.addSink(std::move(fileSink));
+                m_sinkManager.addSink(core::Move(fileSink));
                 
             } else if (type == "console") {
                 // Console sink configuration
                 bool colorized = sinkConfig.contains("colorized") && sinkConfig["colorized"].is_boolean() ? sinkConfig["colorized"].get<bool>() : true;
-                auto consoleSink = ::std::make_unique<ConsoleSink>(colorized, sinkLevel);
-                m_sinkManager.addSink(std::move(consoleSink));
+                auto consoleSink = core::MakeUnique<ConsoleSink>(colorized, sinkLevel);
+                m_sinkManager.addSink(core::Move(consoleSink));
                 
             } else if (type == "syslog") {
                 // Syslog sink configuration
                 // Use applicationId from logConfig as ident
                 std::string ident = m_logConfig.strApplicationId;
                 int facility = sinkConfig.contains("facility") && sinkConfig["facility"].is_number_integer() ? sinkConfig["facility"].get<int>() : LOG_USER;
-                auto syslogSink = ::std::make_unique<SyslogSink>(ident, facility, sinkLevel);
-                m_sinkManager.addSink(std::move(syslogSink));
+                auto syslogSink = core::MakeUnique<SyslogSink>(ident, facility, sinkLevel);
+                m_sinkManager.addSink(core::Move(syslogSink));
                 
             } else if (type == "dlt") {
                 // DLT sink configuration - inherit from logConfig
@@ -454,8 +454,8 @@ namespace log
                 dltConfig.logMarker = m_logConfig.isLogMarker;
                 dltConfig.verboseMode = m_logConfig.isVerboseMode;
                 
-                auto dltSink = ::std::make_unique<DLTSink>(dltConfig, sinkLevel);
-                m_sinkManager.addSink(std::move(dltSink));
+                auto dltSink = core::MakeUnique<DLTSink>(dltConfig, sinkLevel);
+                m_sinkManager.addSink(core::Move(dltSink));
                 
             } else {
                 fprintf(stderr, "[LightAP] LogManager: Unknown sink type '%s', skipped\n", type.c_str());

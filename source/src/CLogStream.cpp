@@ -1,7 +1,7 @@
-#include <chrono>
 #include <stdarg.h>
 #include <ctime>
-#include <core/CPath.hpp>
+#include <lap/core/CPath.hpp>
+#include <lap/core/CTime.hpp>
 #include "CLogStream.hpp"
 #include "CLogger.hpp"
 #include "CLogManager.hpp"

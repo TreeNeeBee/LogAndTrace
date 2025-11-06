@@ -20,13 +20,13 @@
 #ifndef LAP_LOG_LOGMANAGER_HPP
 #define LAP_LOG_LOGMANAGER_HPP
 
-#include <core/CSync.hpp>
-#include <core/CConfig.hpp>
+#include <lap/core/CSync.hpp>
+#include <lap/core/CConfig.hpp>
+#include <lap/core/CTypedef.hpp>
 #include "CCommon.hpp"
 #include "CLogger.hpp"
 #include "CSinkManager.hpp"
-#include <core/CInstanceSpecifier.hpp>
-#include <vector>
+#include <lap/core/CInstanceSpecifier.hpp>
 #include <nlohmann/json.hpp>
 
 namespace lap
@@ -134,9 +134,9 @@ namespace log
         tagLogConfig                        m_logConfig;
         
         // Store sink configurations from JSON for later initialization
-        std::vector<nlohmann::json>        m_sinkConfigs;
+        core::Vector<nlohmann::json>        m_sinkConfigs;
 
-        std::mutex                          m_mtxContextMap;  // TEMP: reverted to std::mutex for debugging
+        core::Mutex                         m_mtxContextMap;
         _LogContextMap                      m_mapLogContext;
 
         core::UniqueHandle< Logger >        m_defaultLogCtx{ nullptr };

@@ -8,7 +8,7 @@
 #include "CConsoleSink.hpp"
 #include <cstdio>
 #include <ctime>
-#include <chrono>
+#include <lap/core/CTime.hpp>
 
 namespace lap
 {

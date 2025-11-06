@@ -11,7 +11,7 @@
 #define LAP_LOG_CONSOLESINK_HPP
 
 #include "ISink.hpp"
-#include <core/CMemory.hpp>
+#include <lap/core/CMemory.hpp>
 
 namespace lap
 {

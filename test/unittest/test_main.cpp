@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include <core/CMemory.hpp>
+#include <lap/core/CMemory.hpp>
 
 int main(int argc, char **argv) {
     // 首先调用 MemManager::getInstance() 确保它先于 LogManager 构造

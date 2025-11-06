@@ -8,8 +8,8 @@
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
 #include "CFileSink.hpp"
-#include <core/CPath.hpp>
-#include <core/CConfig.hpp>
+#include <lap/core/CPath.hpp>
+#include <lap/core/CConfig.hpp>
 #include <fstream>
 
 using namespace lap::log;

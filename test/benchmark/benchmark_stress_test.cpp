@@ -6,7 +6,7 @@
 #include <iomanip>
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
-#include <core/CMemory.hpp>
+#include <lap/core/CMemory.hpp>
 
 using namespace lap::log;
 using namespace lap::core;

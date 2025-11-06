@@ -7,9 +7,9 @@
 
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
-#include <core/CMemory.hpp>
-#include <core/CConfig.hpp>
-#include <core/CPath.hpp>
+#include <lap/core/CMemory.hpp>
+#include <lap/core/CConfig.hpp>
+#include <lap/core/CPath.hpp>
 #include <thread>
 #include <vector>
 #include <atomic>

@@ -7,7 +7,7 @@
  */
 
 #include "CLogManager.hpp"
-#include <core/CInstanceSpecifier.hpp>
+#include <lap/core/CInstanceSpecifier.hpp>
 #include <iostream>
 #include <chrono>
 #include <atomic>

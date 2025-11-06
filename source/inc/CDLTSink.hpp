@@ -11,8 +11,8 @@
 #define LAP_LOG_DLTSINK_HPP
 
 #include "ISink.hpp"
-#include <core/CMemory.hpp>
-#include <core/CString.hpp>
+#include <lap/core/CMemory.hpp>
+#include <lap/core/CString.hpp>
 #include "dlt/dlt.h"
 
 namespace lap

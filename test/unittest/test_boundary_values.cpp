@@ -11,7 +11,7 @@
 #include "CLogger.hpp"
 #include "CLogStream.hpp"
 #include "CFileSink.hpp"
-#include <core/CConfig.hpp>
+#include <lap/core/CConfig.hpp>
 
 using namespace lap::log;
 using namespace lap::core;

@@ -13,9 +13,9 @@ set ( MODULE_EXTERNAL_LIB_DIR /usr/local/lib )
 
 # Build LogAndTrace against local Modules/Core outputs (headers + lib)
 # Create symlink for core headers to match include structure
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/lap)
 file(CREATE_LINK ${CMAKE_SOURCE_DIR}/modules/Core/source/inc 
-     ${CMAKE_CURRENT_BINARY_DIR}/include/core SYMBOLIC)
+     ${CMAKE_CURRENT_BINARY_DIR}/include/lap/core SYMBOLIC)
 
 set ( CORE_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
 set ( CORE_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} )

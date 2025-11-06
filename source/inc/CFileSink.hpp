@@ -11,8 +11,8 @@
 #define LAP_LOG_FILESINK_HPP
 
 #include "ISink.hpp"
-#include <core/CMemory.hpp>
-#include <core/CFile.hpp>
+#include <lap/core/CMemory.hpp>
+#include <lap/core/CFile.hpp>
 
 namespace lap
 {

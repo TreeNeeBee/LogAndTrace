@@ -8,8 +8,8 @@
 #include "CSinkManager.hpp"
 #include "CLogStream.hpp"
 #include "CLogger.hpp"
-#include <algorithm>
-#include <chrono>
+#include <lap/core/CTime.hpp>
+#include <lap/core/CAlgorithm.hpp>
 
 namespace lap
 {
@@ -21,15 +21,15 @@ namespace log
             return;
         }
         
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_sinks.push_back(std::move(sink));
+        core::LockGuard lock(m_mutex);
+        m_sinks.push_back(core::Move(sink));
     }
     
     core::Bool SinkManager::removeSink(core::StringView name) noexcept
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        core::LockGuard lock(m_mutex);
         
-        auto it = std::find_if(m_sinks.begin(), m_sinks.end(),
+        auto it = core::FindIf(m_sinks.begin(), m_sinks.end(),
             [name](const core::UniqueHandle<ISink>& sink) {
                 return sink && sink->getName() == name;
             });
@@ -44,9 +44,9 @@ namespace log
     
     ISink* SinkManager::getSink(core::StringView name) noexcept
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        core::LockGuard lock(m_mutex);
         
-        auto it = std::find_if(m_sinks.begin(), m_sinks.end(),
+        auto it = core::FindIf(m_sinks.begin(), m_sinks.end(),
             [name](const core::UniqueHandle<ISink>& sink) {
                 return sink && sink->getName() == name;
             });
@@ -56,7 +56,7 @@ namespace log
     
     void SinkManager::write(const LogStream& stream) noexcept
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        core::LockGuard lock(m_mutex);
         
         // Convert LogLevelType to LogLevel
         LogLevel level;
@@ -77,9 +77,8 @@ namespace log
         }
         
         // Get timestamp
-        auto now = std::chrono::system_clock::now();
-        core::UInt64 timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-            now.time_since_epoch()).count();
+        auto now = core::Time::nowSystem();
+        core::UInt64 timestamp = core::Time::toUnixMillis(now) * 1000;  // Convert to microseconds
         core::UInt32 threadId = 0;  // TODO: Get actual thread ID
         
         // Get direct references (zero-copy from LogStream buffer)
@@ -97,7 +96,7 @@ namespace log
     
     void SinkManager::flushAll() noexcept
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        core::LockGuard lock(m_mutex);
         
         for (auto& sink : m_sinks) {
             if (sink && sink->isEnabled()) {
@@ -108,13 +107,13 @@ namespace log
     
     void SinkManager::clearAll() noexcept
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        core::LockGuard lock(m_mutex);
         m_sinks.clear();
     }
     
     core::Bool SinkManager::shouldLog(LogLevel level) const noexcept
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        core::LockGuard lock(m_mutex);
         
         // Check global minimum level first
         if (level > m_globalMinLevel) {
