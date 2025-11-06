@@ -1,5 +1,5 @@
 {
-    "logConfig": {
+    "log": {
         "applicationId" : "@PLACEHOLDER_APP_ID@",
         "applicationDescription" : "@PLACEHOLDER_APP_DESC@",
         "contextId" : "@PLACEHOLDER_DEFAULT_CONTEXT_ID@",

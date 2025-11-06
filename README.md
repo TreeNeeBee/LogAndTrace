@@ -510,178 +510,127 @@ cd modules/LogAndTrace
 
 ---
 
-## 🎯 Roadmap & Future Work
+## 🎯 What's Next
 
-### 🚧 Phase 1: Ring Buffer Implementation (Q4 2025 - Q1 2026)
+**Current development focus is on Modeled Messages and Trace system implementation.**
 
-**Objective:** 增加异步日志缓冲，进一步提升高并发场景下的性能
+For a comprehensive roadmap with detailed task breakdown, estimated efforts, and priorities, please see:
 
-#### 1.1 Lock-Free Ring Buffer Core
+👉 **[`doc/TODO.md`](doc/TODO.md)** - Complete feature roadmap and task list
 
-**Design:**
-```cpp
-namespace lap::log {
-
-// 无锁环形缓冲区设计
-template<core::Size Capacity>
-class RingBuffer {
-public:
-    struct LogEntry {
-        core::UInt64 timestamp;
-        core::UInt32 threadId;
-        LogLevelType level;
-        char contextId[16];
-        char message[MAX_LOG_SIZE];
-        core::Size messageLen;
-    };
-    
-    // 生产者接口（Logger 调用）
-    core::Bool tryPush(const LogEntry& entry) noexcept;
-    
-    // 消费者接口（后台线程调用）
-    core::Bool tryPop(LogEntry& entry) noexcept;
-    
-    // 状态查询
-    core::Size size() const noexcept;
-    core::Bool isFull() const noexcept;
-    core::Bool isEmpty() const noexcept;
-    
-private:
-    core::Atomic<core::Size> m_writePos;
-    core::Atomic<core::Size> m_readPos;
-    LogEntry m_buffer[Capacity];
-};
-
-} // namespace lap::log
-```
-
-**Key Features:**
-- ✅ **无锁设计**: 使用 `core::Atomic` 实现 CAS 操作
-- ✅ **固定大小**: 编译期确定容量，无动态分配
-- ✅ **零拷贝**: LogEntry 直接在 buffer 中构造
-- ✅ **线程安全**: 支持多生产者单消费者（MPSC）
-
-#### 1.2 Async Logger Implementation
-
-**Architecture:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│                 Application Thread                          │
-│  Logger::LogInfo() → RingBuffer::tryPush()                  │
-│     ↓ (非阻塞写入)                                           │
-│  立即返回（微秒级延迟）                                      │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                 Background Thread                           │
-│  while (running) {                                          │
-│      if (ringBuffer.tryPop(entry)) {                        │
-│          sinkManager.dispatch(entry);  // 批量写入          │
-│      }                                                       │
-│  }                                                           │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Benefits:**
-- ⚡ **超低延迟**: Logger 调用只需写入内存（<100ns）
-- ⚡ **批量写入**: 后台线程批量刷新到 Sink（提升吞吐）
-- 🛡️ **背压处理**: Buffer 满时可选策略（丢弃/阻塞）
-- 📊 **监控指标**: 队列深度、丢弃计数、延迟统计
-
-#### 1.3 Configuration & API
-
-**Config Extension:**
-```json
-{
-  "logConfig": {
-    "asyncMode": true,
-    "ringBufferSize": 4096,
-    "flushIntervalMs": 10,
-    "overflowStrategy": "drop_oldest"
-  }
-}
-```
-
-**API Changes:**
-```cpp
-// 异步模式初始化
-LogManager::getInstance().initializeAsync(
-    lap::core::InstanceSpecifier("config.json")
-);
-
-// 强制刷新（例如程序退出前）
-LogManager::getInstance().flush();
-
-// 获取统计信息
-auto stats = LogManager::getInstance().getAsyncStats();
-// stats.queueDepth, stats.droppedCount, stats.avgLatency
-```
-
-#### 1.4 Performance Targets
-
-| Metric | Current (Sync) | Target (Async) | Improvement |
-|--------|----------------|----------------|-------------|
-| **Single-thread** | 555K logs/s | **2M+ logs/s** | 3.6x |
-| **Multi-thread (10)** | 27K logs/s | **500K+ logs/s** | 18x |
-| **Avg Latency** | ~1.8 µs | **<100 ns** | 18x |
-| **P99 Latency** | ~10 µs | **<500 ns** | 20x |
-
-#### 1.5 Implementation Plan
-
-**Week 1-2: Core Ring Buffer**
-- [ ] 实现无锁 RingBuffer 模板类（使用 Core::Atomic）
-- [ ] 单元测试：SPSC、MPSC 场景
-- [ ] 性能基准：吞吐量、延迟分布
-
-**Week 3-4: Async Logger Integration**
-- [ ] AsyncLogger 类实现
-- [ ] 后台线程管理（启动/停止/flush）
-- [ ] 配置解析和策略实现（drop_oldest/block）
-
-**Week 5: Testing & Benchmarking**
-- [ ] 多线程压力测试（50+ 线程）
-- [ ] 内存泄漏检测（使用 Core::MemManager）
-- [ ] 性能对比测试（vs 同步模式）
-- [ ] 背压场景测试（buffer 满）
-
-**Week 6: Documentation & Examples**
-- [ ] API 文档更新
-- [ ] 异步模式示例程序
-- [ ] 性能调优指南
-- [ ] 迁移指南（同步 → 异步）
+**Quick Summary:**
+- **v1.0.0 (2025-12)**: Modeled Messages, Trace System
+- **v1.1.0 (2026-Q1)**: Async Logging Queue, Advanced File Management, Log Filtering
+- **v2.0.0 (2026-Q2+)**: Full AUTOSAR compliance, Network logging, Security enhancements
 
 ---
 
-### 🔮 Phase 2: Advanced Features (2026)
+## � Documentation
 
-#### 2.1 Structured Logging
-- JSON 格式输出
-- 键值对支持：`logger.info("event", key1=value1, key2=value2)`
-- 字段类型安全（使用 Core 类型）
+### Active Documentation
 
-#### 2.2 Log Filtering & Sampling
-- 动态过滤规则（正则表达式）
-- 采样率控制（高频日志采样）
-- 敏感信息脱敏（PII masking）
+| Document | Description | Location |
+|----------|-------------|----------|
+| **TODO List** | Feature roadmap and task tracking | [`doc/TODO.md`](doc/TODO.md) |
+| **Design Documents** | Architecture and design specifications | [`doc/design/`](doc/design/) |
+| **Message Catalog Format** | Modeled Messages catalog specification | [`doc/design/MessageCatalog_Format.md`](doc/design/MessageCatalog_Format.md) |
+| **AUTOSAR Spec** | AUTOSAR AP SWS_LogAndTrace specification | [`doc/AUTOSAR_AP_SWS_LogAndTrace.pdf`](doc/AUTOSAR_AP_SWS_LogAndTrace.pdf) |
+| **Index** | Documentation navigation | [`doc/INDEX.md`](doc/INDEX.md) |
 
-#### 2.3 Distributed Tracing Integration
-- OpenTelemetry 集成
-- Trace ID / Span ID 自动注入
-- 分布式上下文传播
+### Archived Documentation
 
-#### 2.4 Performance Enhancements
-- SIMD 优化（timestamp 格式化）
-- Memory pool per-thread（减少竞争）
-- Zero-allocation formatting（constexpr 格式化）
+Historical documentation and completed analysis reports are archived in:
+- [`doc/archive/`](doc/archive/) - Contains implementation summaries, benchmarks, and analysis reports
 
 ---
 
-## 📞 Contact & Support
+## 🗺️ Roadmap
 
-**Maintainer:** ddkv587 (ddkv587@gmail.com)  
-**Repository:** [LightAP](https://github.com/your-org/LightAP)  
-**Documentation:** [docs/](docs/)  
-**Issue Tracker:** [GitHub Issues](https://github.com/your-org/LightAP/issues)
+See **[`doc/TODO.md`](doc/TODO.md)** for detailed task breakdown and time estimates.
+
+### Current Focus: Modeled Messages & Trace (v1.0.0)
+
+**Priority P0 - Target: 2025-12**
+
+1. **🎯 Modeled Messages Implementation** (5-7 days, In Planning)
+   - AUTOSAR-compliant Message ID templates
+   - Compile-time routing with TraceSwitch
+   - DLT message ID support (`dlt_user_log_write_start_id`)
+   - Message catalog generation tools
+   - Non-verbose/verbose mode support
+
+2. **🔍 Trace System Enhancement** (3-4 days, In Planning)
+   - ARTI interface implementation
+   - TraceStatus management
+   - Separate trace and log paths
+
+### Next Phase: Performance & Features (v1.1.0)
+
+**Priority P1 - Target: 2026-Q1**
+
+3. **⚡ Async Logging Queue** (5-7 days, Design Complete)
+   - Lock-free queue implementation
+   - Target: 2M+ logs/sec throughput
+   - Background worker thread
+
+4. **📁 Advanced File Management** (2-3 days)
+   - Time-based rotation
+   - Compression support
+   - Cleanup policies
+
+5. **🔧 Log Filtering** (3-4 days)
+   - Per-context level filtering
+   - Regex-based content filtering
+   - Runtime configuration
+
+### Future Plans (v2.0.0+)
+
+**Priority P2 - Target: 2026-Q2+**
+
+- Network logging (TCP/UDP sinks)
+- Advanced analysis tools
+- Full AUTOSAR compliance certification
+- Security enhancements
+- Multi-platform support
+
+---
+
+## 🤝 Contributing
+
+### Development Status
+
+- **Stable**: Core logging, Multi-sink, DLT integration
+- **Beta**: STL-free architecture (Post-refactor validation)
+- **Planning**: Modeled Messages, Trace system
+
+### How to Contribute
+
+1. Check [`doc/TODO.md`](doc/TODO.md) for open tasks
+2. Read existing code and tests
+3. Follow the STL-free architecture (use Core module types)
+4. Add tests for new features
+5. Update documentation
+
+### Code Style
+
+- Use Core module types (`core::Vector`, `core::Mutex`, etc.)
+- No STL dependencies in LogAndTrace module
+- Follow AUTOSAR naming conventions
+- Add Doxygen comments
+- Zero-copy principles (use `core::StringView`)
+
+---
+
+## � Contact & Support
+
+**Project**: LightAP Middleware  
+**Module**: LogAndTrace  
+**Maintainer**: ddkv587 (ddkv587@gmail.com)
+
+For questions, issues, or contributions:
+- Review documentation in [`doc/`](doc/)
+- Check TODO list: [`doc/TODO.md`](doc/TODO.md)
+- See archived reports: [`doc/archive/`](doc/archive/)
 
 ---
 
@@ -691,5 +640,7 @@ auto stats = LogManager::getInstance().getAsyncStats();
 
 ---
 
-**Last Updated:** 2025-11-06  
-**Version:** 1.1.0 (STL-Free Release)
+**Last Updated**: 2025-11-06  
+**Version**: 1.0.0-dev  
+**Status**: Active Development - Modeled Messages Implementation Phase
+
