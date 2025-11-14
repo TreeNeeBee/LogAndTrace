@@ -7,7 +7,7 @@
 
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
-#include <lap/core/CMemory.hpp>
+#include <lap/core/CInitialization.hpp>
 #include <lap/core/CConfig.hpp>
 #include <lap/core/CPath.hpp>
 
@@ -15,8 +15,11 @@ using namespace lap::log;
 using namespace lap::core;
 
 int main() {
-    // Initialize memory manager
-    MemManager::getInstance();
+    // Initialize Core module
+    auto initResult = Initialize();
+    if (!initResult.HasValue()) {
+        return 1;
+    }
     
     // Initialize ConfigManager
     // Note: Configure file rotation in config JSON:
@@ -51,6 +54,9 @@ int main() {
     
     logger.LogInfo() << "=== Rotation Test Complete ===";
     logger.LogInfo() << "Check the log directory for rotated files (e.g., app.log.1, app.log.2, etc.)";
+    
+    // Deinitialize Core module
+    Deinitialize();
     
     return 0;
 }

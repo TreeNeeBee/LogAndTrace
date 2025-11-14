@@ -2,6 +2,7 @@
 #include <ctime>
 #include <lap/core/CPath.hpp>
 #include <lap/core/CTime.hpp>
+#include <lap/core/CCrypto.hpp>
 #include "CLogStream.hpp"
 #include "CLogger.hpp"
 #include "CLogManager.hpp"
@@ -15,6 +16,7 @@ namespace log
         : m_logLevel( static_cast< LogLevelType >( level ) )
         , m_logger( logger )
         , m_bufferPos( 0 )
+        , m_encodeEnabled( false )
     {
         // Initialize buffer to empty
         m_logBuffer[0] = '\0';
@@ -66,9 +68,42 @@ namespace log
         if ( !sinkMgr.shouldLog(static_cast<LogLevel>(m_logLevel)) ) {
             return;
         }
-         
-        // Write to sinks (SinkManager will access m_logBuffer as friend)
-        sinkMgr.write(*this);
+        
+        // Check if base64 encoding is enabled for this LogStream
+        if ( m_encodeEnabled ) {
+            // Encode the log message using Core's base64 encoder
+            core::String encoded = core::Crypto::Util::base64Encode(
+                reinterpret_cast<const core::UInt8*>(m_logBuffer), 
+                m_bufferPos
+            );
+            
+            // Create a temporary buffer to hold the encoded message
+            char encodedBuffer[MAX_LOG_SIZE * 2];  // Base64 can expand up to 4/3 of original
+            size_t encodedLen = encoded.size();
+            if ( encodedLen >= sizeof(encodedBuffer) ) {
+                encodedLen = sizeof(encodedBuffer) - 1;
+            }
+            std::memcpy(encodedBuffer, encoded.data(), encodedLen);
+            encodedBuffer[encodedLen] = '\0';
+            
+            // Temporarily replace buffer for sink writing
+            char* originalBuffer = const_cast<char*>(m_logBuffer);
+            size_t originalPos = m_bufferPos;
+            
+            // Copy encoded data back to m_logBuffer for SinkManager
+            std::memcpy(originalBuffer, encodedBuffer, encodedLen);
+            const_cast<size_t&>(m_bufferPos) = encodedLen;
+            originalBuffer[encodedLen] = '\0';
+            
+            // Write to sinks (SinkManager will access m_logBuffer as friend)
+            sinkMgr.write(*this);
+            
+            // Restore original state (though buffer will be cleared after this)
+            const_cast<size_t&>(m_bufferPos) = originalPos;
+        } else {
+            // Write to sinks without encoding (SinkManager will access m_logBuffer as friend)
+            sinkMgr.write(*this);
+        }
     }
 
     LogStream& LogStream::WithLocation( core::StringView file, core::Int32 line ) noexcept
@@ -85,6 +120,12 @@ namespace log
             m_bufferPos += len;
             m_logBuffer[m_bufferPos] = '\0';
         }
+        return *this;
+    }
+
+    LogStream& LogStream::WithEncode( bool enable ) noexcept
+    {
+        m_encodeEnabled = enable;
         return *this;
     }
 
@@ -271,6 +312,11 @@ namespace log
             m_logBuffer[m_bufferPos] = '\0';
         }
         return *this;
+    }
+
+    LogStream& LogStream::operator<< ( const core::String& value ) noexcept
+    {
+        return *this << core::StringView(value);
     }
 
     LogStream& LogStream::operator<< ( const char *const value ) noexcept

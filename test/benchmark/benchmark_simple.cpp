@@ -11,7 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <CLog.hpp>
-#include <lap/core/CMemory.hpp>
+#include <lap/core/CInitialization.hpp>
 
 using namespace lap::log;
 using namespace lap::core;
@@ -175,8 +175,11 @@ void benchmarkMemory() {
 }
 
 int main(int argc, char* argv[]) {
-    // Initialize memory manager first
-    MemManager::getInstance();
+    // Initialize Core module
+    auto initResult = lap::core::Initialize();
+    if (!initResult.HasValue()) {
+        return 1;
+    }
     
     // Initialize logging
     LogManager::getInstance().initialize();
@@ -211,6 +214,9 @@ int main(int argc, char* argv[]) {
     std::cout << "\n==============================================\n";
     std::cout << "  Benchmark completed successfully!\n";
     std::cout << "==============================================" << std::endl;
+    
+    // Deinitialize Core module
+    lap::core::Deinitialize();
     
     return 0;
 }

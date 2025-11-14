@@ -93,6 +93,7 @@ if ( ENABLE_MODULE_EXAMPLES )
         ${EXAMPLES_DIR}/example_basic_usage.cpp
         ${EXAMPLES_DIR}/example_multi_thread.cpp
         ${EXAMPLES_DIR}/example_file_rotation.cpp
+        ${EXAMPLES_DIR}/example_base64_encode.cpp
     )
     
     set ( EXAMPLE_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR} ${LOCAL_LIB_INCLUDE_DIRS} )

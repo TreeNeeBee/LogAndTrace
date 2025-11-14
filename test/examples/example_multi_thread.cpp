@@ -7,7 +7,7 @@
 
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
-#include <lap/core/CMemory.hpp>
+#include <lap/core/CInitialization.hpp>
 #include <lap/core/CConfig.hpp>
 #include <lap/core/CPath.hpp>
 #include <thread>
@@ -18,8 +18,11 @@ using namespace lap::log;
 using namespace lap::core;
 
 int main() {
-    // Initialize memory manager
-    MemManager::getInstance();
+    // Initialize Core module
+    auto initResult = Initialize();
+    if (!initResult.HasValue()) {
+        return 1;
+    }
     
     // Initialize ConfigManager with config
     auto& cfgMgr = ConfigManager::getInstance();
@@ -77,6 +80,9 @@ int main() {
     
     logger.LogInfo() << "Multi-threaded test completed successfully";
     logger.LogInfo() << "Total messages logged: " << (NUM_THREADS * LOGS_PER_THREAD);
+    
+    // Deinitialize Core module
+    Deinitialize();
     
     return 0;
 }

@@ -7,7 +7,7 @@
 
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
-#include <lap/core/CMemory.hpp>
+#include <lap/core/CInitialization.hpp>
 #include <lap/core/CConfig.hpp>
 #include <lap/core/CPath.hpp>
 
@@ -15,8 +15,11 @@ using namespace lap::log;
 using namespace lap::core;
 
 int main(int argc, char* argv[]) {
-    // Initialize memory manager first
-    MemManager::getInstance();
+    // Initialize Core module
+    auto initResult = Initialize();
+    if (!initResult.HasValue()) {
+        return 1;
+    }
     
     // Initialize ConfigManager with config file
     auto& cfgMgr = ConfigManager::getInstance();
@@ -60,6 +63,9 @@ int main(int argc, char* argv[]) {
     auto& customLogger = logMgr.registerLogger("CUSTOM", "Custom Context", LogLevel::kDebug);
     customLogger.LogInfo() << "Message from custom logger";
     customLogger.LogDebug() << "Debug message from custom logger";
+    
+    // Deinitialize Core module
+    Deinitialize();
     
     return 0;
 }

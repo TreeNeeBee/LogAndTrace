@@ -23,6 +23,7 @@
 #include "CConsoleSink.hpp"
 #include "CFileSink.hpp"
 #include "CSyslogSink.hpp"
+#include <lap/core/CInitialization.hpp>
 
 using namespace lap::log;
 using namespace lap::core;
@@ -301,7 +302,12 @@ void benchmarkSustainedThroughput() {
 }
 
 int main() {
-    lap::core::MemManager::getInstance();  // Initialize memory manager first
+    // Initialize Core module
+    auto initResult = Initialize();
+    if (!initResult.HasValue()) {
+        return 1;
+    }
+    
     std::cout << "\n╔════════════════════════════════════════════════════════════════╗" << std::endl;
     std::cout << "║         LightAP Log System - Throughput Benchmark             ║" << std::endl;
     std::cout << "╚════════════════════════════════════════════════════════════════╝" << std::endl;
@@ -318,8 +324,12 @@ int main() {
         
     } catch (const std::exception& e) {
         std::cerr << "Benchmark failed: " << e.what() << std::endl;
+        Deinitialize();
         return 1;
     }
+    
+    // Deinitialize Core module
+    Deinitialize();
     
     return 0;
 }

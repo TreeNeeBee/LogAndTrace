@@ -175,16 +175,16 @@ namespace log
             
             // Delete oldest backup if exists
             if (i == static_cast<core::Int32>(m_maxFiles) - 1) {
-                core::File::remove(newPath);
+                core::File::Util::remove(newPath);
             }
             
             // Rename (move operation)
-            core::File::rename(oldPath, newPath);
+            core::File::Util::rename(oldPath, newPath);
         }
         
         // Rename current log file to .1
         core::String backupPath = m_filePath + ".1";
-        core::File::rename(m_filePath, backupPath);
+        core::File::Util::rename(m_filePath, backupPath);
         
         // Open new log file
         m_currentSize = 0;

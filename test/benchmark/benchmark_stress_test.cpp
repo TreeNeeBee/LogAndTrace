@@ -6,7 +6,7 @@
 #include <iomanip>
 #include "CLogManager.hpp"
 #include "CLogger.hpp"
-#include <lap/core/CMemory.hpp>
+#include <lap/core/CInitialization.hpp>
 
 using namespace lap::log;
 using namespace lap::core;
@@ -283,8 +283,11 @@ int main(int argc, char** argv) {
               << "Log System Stress Test & Memory Monitor\n"
               << "========================================\n";
     
-    // 首先初始化 MemManager 确保正确的析构顺序
-    MemManager::getInstance();
+    // Initialize Core module
+    auto initResult = Initialize();
+    if (!initResult.HasValue()) {
+        return 1;
+    }
     
     printMemoryStats("Initial");
     
@@ -325,6 +328,9 @@ int main(int argc, char** argv) {
     std::cout << "\n========================================\n"
               << "All benchmarks completed!\n"
               << "========================================\n";
+    
+    // Deinitialize Core module
+    Deinitialize();
     
     return 0;
 }

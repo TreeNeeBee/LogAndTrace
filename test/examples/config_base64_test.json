@@ -1,0 +1,14 @@
+{
+  "LogAndTrace": {
+    "sinks": [
+      {
+        "type": "console",
+        "name": "console",
+        "enabled": true,
+        "level": "debug",
+        "pattern": "[%T.%e] [%-5l] [%n] %v"
+      }
+    ],
+    "default_level": "debug"
+  }
+}

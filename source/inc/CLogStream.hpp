@@ -51,6 +51,14 @@ namespace log
         void        Flush () noexcept;
         LogStream&  WithLocation ( core::StringView file, core::Int32 line ) noexcept;
 
+        /** @fn         LogStream& WithEncode (bool enable = true) noexcept;
+         *  @brief      Enable or disable base64 encoding for this LogStream
+         *  @param[in]  enable          true to enable base64 encoding, false to disable (default: true)
+         *  @return     LogStream&      reference to this LogStream for chaining
+         *  @note       Usage: logger.WithLevel(kInfo).WithEncode() << "message"
+         */
+        LogStream&  WithEncode( bool enable = true ) noexcept;
+
         LogStream&  operator<< ( core::Bool value ) noexcept;
         LogStream&  operator<< ( core::UInt8 value ) noexcept;
         LogStream&  operator<< ( core::UInt16 value ) noexcept;
@@ -75,6 +83,7 @@ namespace log
         LogStream&  operator<< ( const LogBin64 &value ) noexcept;
 
         LogStream&  operator<< ( const core::StringView value ) noexcept;
+        LogStream&  operator<< ( const core::String& value ) noexcept;
         LogStream&  operator<< ( const char *const value ) noexcept;
 
         LogStream&  operator<< ( core::Span< const core::Byte > data ) noexcept;
@@ -131,6 +140,7 @@ namespace log
         const Logger&           m_logger;
         char                    m_logBuffer[MAX_LOG_SIZE];  // Fixed-size log buffer
         size_t                  m_bufferPos;  // Current position in buffer
+        bool                    m_encodeEnabled{ false };  // Base64 encoding flag
     };
 
     LogStream& operator<< ( LogStream &out, LogLevel value ) noexcept;

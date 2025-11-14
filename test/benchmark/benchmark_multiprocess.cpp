@@ -8,6 +8,7 @@
 
 #include "CLogManager.hpp"
 #include <lap/core/CInstanceSpecifier.hpp>
+#include <lap/core/CInitialization.hpp>
 #include <iostream>
 #include <chrono>
 #include <atomic>
@@ -130,7 +131,12 @@ VerificationResult verifyLogFile() {
 }
 
 int main() {
-    lap::core::MemManager::getInstance();  // Initialize memory manager first
+    // Initialize Core module
+    auto initResult = lap::core::Initialize();
+    if (!initResult.HasValue()) {
+        return 1;
+    }
+    
     std::cout << "==============================================\n";
     std::cout << "  Multi-Process FileSink Benchmark\n";
     std::cout << "==============================================\n\n";
@@ -260,6 +266,9 @@ int main() {
     
     // Clean up
     unlink(CONFIG_FILE);
+    
+    // Deinitialize Core module
+    lap::core::Deinitialize();
     
     return verification.integrityOk ? 0 : 1;
 }
