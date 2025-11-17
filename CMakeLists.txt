@@ -12,10 +12,12 @@ set ( MODULE_EXTERNAL_INCLUDE_DIR /usr/local/include )
 set ( MODULE_EXTERNAL_LIB_DIR /usr/local/lib )
 
 # Build LogAndTrace against local Modules/Core outputs (headers + lib)
-# Create symlink for core headers to match include structure
+# Create symlinks for headers to match include structure (lap/core and lap/log)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/lap)
 file(CREATE_LINK ${CMAKE_SOURCE_DIR}/modules/Core/source/inc 
      ${CMAKE_CURRENT_BINARY_DIR}/include/lap/core SYMBOLIC)
+file(CREATE_LINK ${CMAKE_CURRENT_SOURCE_DIR}/source/inc 
+     ${CMAKE_CURRENT_BINARY_DIR}/include/lap/log SYMBOLIC)
 
 set ( CORE_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
 set ( CORE_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} )
@@ -124,63 +126,5 @@ endif ()
 # ==============================================================================
 # Installation and Export Configuration
 # ==============================================================================
-
-# Install library with export support
-install(TARGETS ${PLATFORM_SYSTEM_TARGET}_log
-    EXPORT LogAndTraceTargets
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    RUNTIME DESTINATION bin
-    INCLUDES DESTINATION include/lap/log
-)
-
-# Install headers
-install(DIRECTORY ${MODULE_SOURCE_CXX_DIR}/inc/
-    DESTINATION include/lap/log
-    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
-)
-
-# Install documentation
-install(FILES 
-    ${CMAKE_CURRENT_SOURCE_DIR}/README.md
-    DESTINATION share/doc/lap-log
-)
-
-# ==============================================================================
-# CMake Package Configuration (支持 find_package)
-# ==============================================================================
-include(CMakePackageConfigHelpers)
-
-# 导出目标
-install(EXPORT LogAndTraceTargets
-    FILE LogAndTraceTargets.cmake
-    NAMESPACE LightAP::
-    DESTINATION lib/cmake/LogAndTrace
-    COMPONENT Development
-)
-
-# 配置包配置文件
-set(CMAKE_INSTALL_INCLUDEDIR "include/lap/log")
-configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/LogAndTraceConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/LogAndTraceConfig.cmake
-    INSTALL_DESTINATION lib/cmake/LogAndTrace
-    PATH_VARS CMAKE_INSTALL_INCLUDEDIR
-)
-
-# 生成版本文件
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/LogAndTraceConfigVersion.cmake
-    VERSION ${MODULE_VERNO}
-    COMPATIBILITY SameMajorVersion
-)
-
-# 安装配置文件
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/LogAndTraceConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/LogAndTraceConfigVersion.cmake
-    DESTINATION lib/cmake/LogAndTrace
-    COMPONENT Development
-)
-
-message(STATUS "[LogAndTrace] CMake package configuration will be installed to lib/cmake/LogAndTrace")
+# Note: Export is handled by SharedLibrary.cmake.in template
+# All modules use unified export strategy via BuildTemplate
